@@ -52,14 +52,26 @@ app.get('/diag-db', async (_req, res) => {
     result.prismaError = (e as Error).message;
   }
 
-  // 2) node:sqlite direct query (in-process, no spawned engine)
+  // 2) The REAL query the /api/categories route runs (findMany + _count)
+  try {
+    const cats = await prisma.category.findMany({
+      include: { _count: { select: { templates: true } } },
+    });
+    result.categoriesFindMany = `OK (${cats.length})`;
+  } catch (e) {
+    result.categoriesFindManyError = (e as Error).message;
+  }
+
+  // 3) node:sqlite direct query + inspect raw createdAt value/format
   try {
     const { DatabaseSync } = require('node:sqlite');
     const dbPath = (process.env.DATABASE_URL || '').replace(/^file:/, '');
     const db = new DatabaseSync(dbPath);
     const row = db.prepare('SELECT COUNT(*) AS c FROM "Category"').get() as { c: number };
+    const sample = db.prepare('SELECT id, createdAt, updatedAt FROM "Category" LIMIT 1').get();
     db.close();
     result.sqliteCategoryCount = row.c;
+    result.sampleRow = sample;
     result.dbPath = dbPath;
   } catch (e) {
     result.sqliteError = (e as Error).message;

@@ -234,8 +234,9 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
   const toJSON = useCallback(() => JSON.stringify(fabricRef.current?.toJSON() ?? {}), []);
 
   const toDataURL = useCallback(() => {
-    // multiplier 3 ≈ 285 dpi on A4 for crisp print quality
-    return fabricRef.current?.toDataURL({ format: 'png', quality: 1, multiplier: 3 }) ?? '';
+    // JPEG at multiplier 3 (≈ 285 dpi): embeds directly into the PDF (no slow
+    // deflate of a huge PNG). Same resolution, crisp print quality.
+    return fabricRef.current?.toDataURL({ format: 'jpeg', quality: 0.95, multiplier: 3 }) ?? '';
   }, []);
 
   const toThumbnail = useCallback(() => {

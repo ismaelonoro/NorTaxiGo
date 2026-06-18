@@ -149,7 +149,7 @@ export default function SettingsPage() {
       {/* Folders */}
       <section className="card p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="section-title text-base">Carpetas de tarjetas</h2>
+          <h2 className="section-title text-base">Carpetas de noras</h2>
           <button
             onClick={() => setEditingFolder({ name: '' })}
             className="btn-secondary text-xs py-1.5"
@@ -185,7 +185,7 @@ export default function SettingsPage() {
                 <span className="text-sm text-gray-800">{f.name}</span>
                 {f._count && (
                   <span className="badge bg-gray-100 text-gray-500 text-[10px]">
-                    {f._count.instances} tarjetas
+                    {f._count.instances} noras
                   </span>
                 )}
               </div>

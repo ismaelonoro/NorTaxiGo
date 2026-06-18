@@ -180,6 +180,19 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     canvas.renderAll();
   }, []);
 
+  // Opacity of the background image (0–1). No effect when there's no image.
+  const setBackgroundOpacity = useCallback((opacity: number) => {
+    const canvas = fabricRef.current;
+    if (!canvas?.backgroundImage) return;
+    canvas.backgroundImage.set({ opacity });
+    canvas.renderAll();
+  }, []);
+
+  const getBackgroundOpacity = useCallback((): number => {
+    const img = fabricRef.current?.backgroundImage;
+    return img ? (img.opacity ?? 1) : 1;
+  }, []);
+
   const updateSelected = useCallback((props: Partial<SelectedObjectProps>) => {
     const canvas = fabricRef.current;
     const obj = canvas?.getActiveObject();
@@ -313,6 +326,8 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     addImageFromURL,
     setBackground,
     setBackgroundColor,
+    setBackgroundOpacity,
+    getBackgroundOpacity,
     updateSelected,
     deleteSelected,
     bringForward,

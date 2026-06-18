@@ -40,7 +40,16 @@ export default function PropertiesPanel({ selected, onChange }: Props) {
 
       {/* Angle */}
       <div>
-        <label className="label text-[10px]">Rotación ({selected.angle}°)</label>
+        <div className="flex items-center justify-between">
+          <label className="label text-[10px]">Rotación ({Math.round(selected.angle)}°)</label>
+          <button
+            onClick={() => onChange({ angle: 0 })}
+            className="text-[10px] text-gold-600 hover:text-gold-700 font-medium"
+            title="Poner horizontal (0°)"
+          >
+            Enderezar
+          </button>
+        </div>
         <input
           type="range"
           min={-180}

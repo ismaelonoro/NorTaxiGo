@@ -30,6 +30,7 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
   const [aiPrompt, setAiPrompt] = useState('');
   const [generatingAI, setGeneratingAI] = useState(false);
   const [bgColor, setBgColor] = useState('#ffffff');
+  const [bgOpacity, setBgOpacity] = useState(1);
   const [gallery, setGallery] = useState<Background[]>([]);
   const [loadingGallery, setLoadingGallery] = useState(false);
   const [applyingBg, setApplyingBg] = useState<string | null>(null);
@@ -37,9 +38,11 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
-  // Load the gallery the first time the background panel is opened
+  // Load the gallery + sync the opacity slider when the panel opens
   useEffect(() => {
-    if (showBgPanel && gallery.length === 0) {
+    if (!showBgPanel) return;
+    setBgOpacity(designer.getBackgroundOpacity());
+    if (gallery.length === 0) {
       setLoadingGallery(true);
       getBackgrounds()
         .then(setGallery)
@@ -249,6 +252,24 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
               >
                 Color sólido
               </button>
+            </div>
+
+            {/* Background image opacity */}
+            <div>
+              <label className="label text-[10px]">Opacidad del fondo ({Math.round(bgOpacity * 100)}%)</label>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={bgOpacity}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setBgOpacity(v);
+                  designer.setBackgroundOpacity(v);
+                }}
+                className="w-full accent-gold-500"
+              />
             </div>
 
             {/* Gallery */}

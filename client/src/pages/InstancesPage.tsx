@@ -52,7 +52,7 @@ export default function InstancesPage() {
       });
       await tempCanvas.loadFromJSON(JSON.parse(instance.design));
       tempCanvas.renderAll();
-      const dataURL = tempCanvas.toDataURL({ format: 'png', quality: 1, multiplier: 3 });
+      const dataURL = tempCanvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 });
       await exportCanvasToPDF(dataURL, instance.name);
       tempCanvas.dispose();
       toast.success('PDF descargado');

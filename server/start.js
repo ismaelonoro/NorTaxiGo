@@ -16,6 +16,7 @@ process.on('unhandledRejection', (reason) => {
 });
 
 console.log('[NorTaxiGo] === STARTUP ===');
+console.log('[NorTaxiGo] BUILD MARKER : 2026-06-18-diag-1');
 console.log('[NorTaxiGo] __dirname :', __dirname);
 console.log('[NorTaxiGo] cwd       :', process.cwd());
 console.log('[NorTaxiGo] NODE_ENV  :', process.env.NODE_ENV);
@@ -63,7 +64,8 @@ function runPrisma(subCmd) {
     ? `node "${prismaCliJs}" ${subCmd}${schemaArg}`
     : `npx prisma ${subCmd}${schemaArg}`;
   console.log(`[NorTaxiGo] Running: ${cmd}`);
-  execSync(cmd, { cwd: __dirname, stdio: 'inherit', env: process.env, timeout: 120000 });
+  // Capture output so we can see WHY it fails (stdio:'inherit' was swallowing it)
+  execSync(cmd, { cwd: __dirname, encoding: 'utf8', env: process.env, timeout: 120000 });
 }
 
 // Push schema to database (prisma generate runs during build, not here)
@@ -73,7 +75,11 @@ try {
   console.log('[NorTaxiGo] Database ready via prisma db push.');
   dbPushOk = true;
 } catch (e) {
-  console.error('[NorTaxiGo] prisma db push failed:', e.message);
+  console.error('[NorTaxiGo] prisma db push failed.');
+  console.error('[NorTaxiGo]   message:', e.message);
+  console.error('[NorTaxiGo]   code   :', e.code, '| status:', e.status, '| signal:', e.signal);
+  if (e.stdout) console.error('[NorTaxiGo]   stdout :', String(e.stdout).slice(0, 1000));
+  if (e.stderr) console.error('[NorTaxiGo]   stderr :', String(e.stderr).slice(0, 1000));
 }
 
 // Fallback: create tables directly using node:sqlite (Node 22+)

@@ -46,6 +46,8 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
+console.log('[NorTaxiGo] index.ts: app configured, calling listen on port', PORT, '...');
+
 const server = app.listen(PORT, () => {
   const addr = server.address();
   console.log(`🚕 NorTaxiGo server running on http://localhost:${PORT} — bound:`, JSON.stringify(addr));

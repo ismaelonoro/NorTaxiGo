@@ -21,10 +21,14 @@ export async function exportCanvasToPDF(dataURL: string, filename = 'nortaxigo')
     compress: true,
   });
 
+  const ta = performance.now();
   pdf.addImage(dataURL, 'PNG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
+  const tb = performance.now();
 
   const safeName = `${filename}.pdf`;
   const blob = pdf.output('blob'); // generate once
+  const tc = performance.now();
+  console.log(`[pdf] addImage=${(tb - ta).toFixed(0)}ms output=${(tc - tb).toFixed(0)}ms blob_bytes=${blob.size}`);
   const file = new File([blob], safeName, { type: 'application/pdf' });
 
   // Native share sheet on touch devices (lets you send to WhatsApp, etc.)

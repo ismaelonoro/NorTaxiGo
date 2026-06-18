@@ -46,14 +46,19 @@ export default function InstancesPage() {
   const handleExport = async (instance: Instance) => {
     setExporting(instance.id);
     try {
+      const t0 = performance.now();
       const tempCanvas = new fabric.Canvas(document.createElement('canvas'), {
         width: 794,
         height: 1123,
       });
       await tempCanvas.loadFromJSON(JSON.parse(instance.design));
       tempCanvas.renderAll();
+      const t1 = performance.now();
       const dataURL = tempCanvas.toDataURL({ format: 'png', quality: 1, multiplier: 3 });
+      const t2 = performance.now();
+      console.log(`[export] design bytes=${instance.design.length} load+render=${(t1 - t0).toFixed(0)}ms toDataURL=${(t2 - t1).toFixed(0)}ms dataURL_bytes=${dataURL.length}`);
       await exportCanvasToPDF(dataURL, instance.name);
+      console.log(`[export] makePDF=${(performance.now() - t2).toFixed(0)}ms total=${(performance.now() - t0).toFixed(0)}ms`);
       tempCanvas.dispose();
       toast.success('PDF descargado');
     } catch {

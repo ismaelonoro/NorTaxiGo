@@ -9,14 +9,14 @@ const nav = [
   { to: '/configuracion', label: 'Configuración', icon: Settings },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const handleLogout = async () => {
     await logout();
     window.location.href = '/';
   };
 
   return (
-    <aside className="w-56 shrink-0 bg-white border-r border-gray-100 flex flex-col h-screen sticky top-0">
+    <div className="w-56 h-full bg-white border-r border-gray-100 flex flex-col">
       {/* Logo */}
       <div className="px-4 py-5 border-b border-gray-100 flex justify-center">
         <img src="/logo.png" alt="NorTaxiGo" className="h-24 w-auto" />
@@ -29,6 +29,7 @@ export default function Sidebar() {
             key={to}
             to={to}
             end={end}
+            onClick={onNavigate}
             className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
           >
             <Icon size={16} strokeWidth={2} />
@@ -48,6 +49,6 @@ export default function Sidebar() {
         </button>
         <p className="text-[10px] text-gray-400 px-3 pt-2">© 2025 NorTaxiGo</p>
       </div>
-    </aside>
+    </div>
   );
 }

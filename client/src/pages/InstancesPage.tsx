@@ -63,21 +63,22 @@ export default function InstancesPage() {
   );
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-8">
+      <div className="flex items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="page-title">Mis noras</h1>
           <p className="text-sm text-gray-500 mt-0.5">Tus noras personalizadas por evento.</p>
         </div>
-        <button onClick={() => navigate('/instancias/nueva')} className="btn-primary">
+        <button onClick={() => navigate('/instancias/nueva')} className="btn-primary shrink-0">
           <Plus size={16} />
-          Nueva nora
+          <span className="hidden sm:inline">Nueva nora</span>
+          <span className="sm:hidden">Nueva</span>
         </button>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 mb-6 flex-wrap">
-        <div className="relative flex-1 max-w-xs">
+      <div className="flex gap-3 mb-6 flex-col sm:flex-row sm:flex-wrap">
+        <div className="relative sm:flex-1 sm:max-w-xs">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             className="input pl-8"

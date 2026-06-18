@@ -69,22 +69,23 @@ export default function TemplatesPage() {
   );
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="page-title">Plantillas</h1>
           <p className="text-sm text-gray-500 mt-0.5">Diseña y gestiona tus plantillas de tarjetas.</p>
         </div>
-        <button onClick={() => navigate('/plantillas/nueva')} className="btn-primary">
+        <button onClick={() => navigate('/plantillas/nueva')} className="btn-primary shrink-0">
           <Plus size={16} />
-          Nueva plantilla
+          <span className="hidden sm:inline">Nueva plantilla</span>
+          <span className="sm:hidden">Nueva</span>
         </button>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 mb-6">
-        <div className="relative flex-1 max-w-xs">
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <div className="relative sm:flex-1 sm:max-w-xs">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             className="input pl-8"

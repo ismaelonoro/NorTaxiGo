@@ -163,7 +163,24 @@ export default function DesignerPage() {
   const title = mode === 'template' ? 'Editor de plantilla' : 'Editor de tarjeta';
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <>
+      {/* Mobile: the drag & drop editor isn't usable on a phone — show a notice */}
+      <div className="md:hidden min-h-screen flex flex-col items-center justify-center text-center gap-4 p-8 bg-cream-50">
+        <img src="/logo.png" alt="NorTaxiGo" className="h-20 w-auto" />
+        <h1 className="text-lg font-semibold text-gray-800 font-display">
+          El editor está disponible en ordenador
+        </h1>
+        <p className="text-sm text-gray-500 max-w-xs">
+          Diseñar sobre un A4 necesita una pantalla grande. Desde el móvil puedes ver,
+          duplicar y descargar tus diseños; para editarlos, abre NorTaxiGo en un ordenador.
+        </p>
+        <button onClick={() => navigate(backUrl)} className="btn-primary">
+          <ArrowLeft size={15} /> Volver
+        </button>
+      </div>
+
+      {/* Editor — large screens only */}
+      <div className="hidden md:flex h-screen overflow-hidden bg-gray-50">
       {/* Left toolbar */}
       <aside className="w-52 shrink-0 bg-white border-r border-gray-100 overflow-y-auto">
         <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-100">
@@ -313,6 +330,7 @@ export default function DesignerPage() {
           </div>
         </div>
       </Modal>
-    </div>
+      </div>
+    </>
   );
 }

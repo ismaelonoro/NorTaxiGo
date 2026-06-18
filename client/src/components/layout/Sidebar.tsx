@@ -1,14 +1,20 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, BookTemplate, FolderOpen, Settings } from 'lucide-react';
+import { LayoutDashboard, BookTemplate, FolderOpen, Settings, LogOut } from 'lucide-react';
+import { logout } from '@/lib/auth';
 
 const nav = [
   { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true },
   { to: '/plantillas', label: 'Plantillas', icon: BookTemplate },
-  { to: '/instancias', label: 'Mis tarjetas', icon: FolderOpen },
+  { to: '/instancias', label: 'Mis noras', icon: FolderOpen },
   { to: '/configuracion', label: 'Configuración', icon: Settings },
 ];
 
 export default function Sidebar() {
+  const handleLogout = async () => {
+    await logout();
+    window.location.href = '/';
+  };
+
   return (
     <aside className="w-56 shrink-0 bg-white border-r border-gray-100 flex flex-col h-screen sticky top-0">
       {/* Logo */}
@@ -32,8 +38,15 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-5 py-4 border-t border-gray-100">
-        <p className="text-[10px] text-gray-400">© 2025 Nort Taxi</p>
+      <div className="px-3 py-4 border-t border-gray-100 space-y-0.5">
+        <button
+          onClick={handleLogout}
+          className="sidebar-link w-full text-gray-400 hover:text-red-500 hover:bg-red-50"
+        >
+          <LogOut size={16} strokeWidth={2} />
+          Cerrar sesión
+        </button>
+        <p className="text-[10px] text-gray-400 px-3 pt-2">© 2025 NorTaxiGo</p>
       </div>
     </aside>
   );

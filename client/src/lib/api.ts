@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { Category, Template, Folder, Instance } from '@/types';
 
-const api = axios.create({ baseURL: '/api' });
+const api = axios.create({ baseURL: '/api', withCredentials: true });
 
 // Categories
 export const getCategories = () => api.get<Category[]>('/categories').then((r) => r.data);

@@ -22,7 +22,7 @@ export default function HomePage() {
 
   const statCards = [
     { label: 'Plantillas', value: stats.templates, icon: BookTemplate, color: 'text-gold-600', bg: 'bg-gold-50' },
-    { label: 'Mis tarjetas', value: stats.instances, icon: FolderOpen, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: 'Mis noras', value: stats.instances, icon: FolderOpen, color: 'text-blue-600', bg: 'bg-blue-50' },
     { label: 'Categorías', value: stats.categories, icon: Layers, color: 'text-purple-600', bg: 'bg-purple-50' },
   ];
 
@@ -31,14 +31,14 @@ export default function HomePage() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="page-title mb-1">Bienvenida 👋</h1>
-        <p className="text-sm text-gray-500">Crea tarjetas elegantes de taxi para tus eventos.</p>
+        <p className="text-sm text-gray-500">Crea noras elegantes para tus eventos de taxi.</p>
       </div>
 
       {/* Quick action */}
       <div className="card p-6 mb-8 bg-gradient-to-br from-gold-500 to-gold-600 border-0">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-white font-semibold text-lg mb-1 font-display">Nueva tarjeta</h2>
+            <h2 className="text-white font-semibold text-lg mb-1 font-display">Nueva nora</h2>
             <p className="text-gold-100 text-sm">Elige una plantilla y personalízala en segundos.</p>
           </div>
           <button
@@ -46,7 +46,7 @@ export default function HomePage() {
             className="flex items-center gap-2 px-5 py-2.5 bg-white text-gold-600 text-sm font-semibold rounded-lg hover:bg-gold-50 transition-colors shadow-sm"
           >
             <Plus size={16} />
-            Crear tarjeta
+            Crear nora
           </button>
         </div>
       </div>
@@ -86,12 +86,12 @@ export default function HomePage() {
           </div>
         ) : recent.length === 0 ? (
           <div className="card p-8 text-center text-gray-400">
-            <p className="text-sm">Aún no has creado ninguna tarjeta.</p>
+            <p className="text-sm">Aún no has creado ninguna nora.</p>
             <button
               onClick={() => navigate('/instancias/nueva')}
               className="mt-3 btn-primary"
             >
-              <Plus size={14} /> Crear primera tarjeta
+              <Plus size={14} /> Crear primera nora
             </button>
           </div>
         ) : (

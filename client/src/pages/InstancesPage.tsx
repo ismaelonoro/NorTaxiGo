@@ -34,7 +34,7 @@ export default function InstancesPage() {
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`¿Eliminar "${name}"?`)) return;
     await deleteInstance(id);
-    toast.success('Tarjeta eliminada');
+    toast.success('Nora eliminada');
     load();
   };
 
@@ -66,12 +66,12 @@ export default function InstancesPage() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="page-title">Mis tarjetas</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Tus tarjetas de taxi personalizadas por evento.</p>
+          <h1 className="page-title">Mis noras</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Tus noras personalizadas por evento.</p>
         </div>
         <button onClick={() => navigate('/instancias/nueva')} className="btn-primary">
           <Plus size={16} />
-          Nueva tarjeta
+          Nueva nora
         </button>
       </div>
 
@@ -81,7 +81,7 @@ export default function InstancesPage() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             className="input pl-8"
-            placeholder="Buscar tarjetas..."
+            placeholder="Buscar noras..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -124,11 +124,11 @@ export default function InstancesPage() {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon="🚕"
-          title="Aún no hay tarjetas"
-          description="Elige una plantilla, personaliza el texto y el QR, y descarga tu tarjeta en PDF."
+          title="Aún no hay noras"
+          description="Elige una plantilla, personaliza el texto y el QR, y descarga tu nora en PDF."
           action={
             <button onClick={() => navigate('/instancias/nueva')} className="btn-primary">
-              <Plus size={14} /> Crear primera tarjeta
+              <Plus size={14} /> Crear primera nora
             </button>
           }
         />

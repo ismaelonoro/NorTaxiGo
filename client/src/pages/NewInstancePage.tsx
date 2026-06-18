@@ -33,7 +33,7 @@ export default function NewInstancePage() {
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h1 className="page-title">Nueva tarjeta</h1>
+          <h1 className="page-title">Nueva nora</h1>
           <p className="text-sm text-gray-500 mt-0.5">Elige una plantilla para empezar.</p>
         </div>
       </div>

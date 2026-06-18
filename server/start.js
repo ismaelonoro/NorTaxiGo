@@ -5,7 +5,6 @@ const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// Catch any unhandled crash and log it before dying
 process.on('uncaughtException', (err) => {
   console.error('[NorTaxiGo] UNCAUGHT EXCEPTION:', err.message);
   console.error(err.stack);
@@ -23,13 +22,13 @@ console.log('[NorTaxiGo] NODE_ENV  :', process.env.NODE_ENV);
 console.log('[NorTaxiGo] PORT      :', process.env.PORT);
 console.log('[NorTaxiGo] DB_URL set:', !!process.env.DATABASE_URL);
 
-// Default DATABASE_URL if not provided (SQLite next to this file)
+// Default DATABASE_URL to an absolute SQLite path next to this file
 if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = 'file:' + path.join(__dirname, 'prod.db');
   console.log('[NorTaxiGo] DATABASE_URL defaulted to:', process.env.DATABASE_URL);
 }
 
-// Fix relative SQLite path to absolute so it works regardless of cwd
+// Fix relative sqlite path to absolute
 if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('file:./')) {
   const rel = process.env.DATABASE_URL.replace('file:./', '');
   const abs = path.join(__dirname, rel);
@@ -37,33 +36,44 @@ if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('file:./')) 
   console.log('[NorTaxiGo] DATABASE_URL resolved to:', process.env.DATABASE_URL);
 }
 
-// Find prisma binary: check server/node_modules, then workspace root node_modules, then npx
-const candidateBins = [
-  path.join(__dirname, 'node_modules', '.bin', 'prisma'),
-  path.join(__dirname, '..', 'node_modules', '.bin', 'prisma'),
+// Find the Prisma CLI JS entry point directly (avoid unreliable shell wrappers)
+// In a workspace, deps are hoisted to the root node_modules
+const prismaCliCandidates = [
+  path.join(__dirname, 'node_modules', 'prisma', 'build', 'index.js'),
+  path.join(__dirname, '..', 'node_modules', 'prisma', 'build', 'index.js'),
 ];
-const foundBin = candidateBins.find(b => fs.existsSync(b));
+const prismaCliJs = prismaCliCandidates.find(p => fs.existsSync(p));
 const schemaPath = path.join(__dirname, 'prisma', 'schema.prisma');
 const schemaArg = fs.existsSync(schemaPath) ? ` --schema="${schemaPath}"` : '';
-const prismaCmd = (foundBin ? `"${foundBin}"` : 'npx prisma') + ` db push --skip-generate` + schemaArg;
 
-console.log('[NorTaxiGo] prisma bin :', foundBin || '(npx fallback)');
+console.log('[NorTaxiGo] prisma CLI :', prismaCliJs || '(not found, will use npx)');
 console.log('[NorTaxiGo] schema     :', fs.existsSync(schemaPath) ? schemaPath : '(not found)');
-console.log('[NorTaxiGo] Running prisma db push...');
+
+function runPrisma(subCmd) {
+  const cmd = prismaCliJs
+    ? `node "${prismaCliJs}" ${subCmd}${schemaArg}`
+    : `npx prisma ${subCmd}${schemaArg}`;
+  console.log(`[NorTaxiGo] Running: ${cmd}`);
+  execSync(cmd, { cwd: __dirname, stdio: 'inherit', env: process.env, timeout: 120000 });
+}
+
+// Generate client (needed if build didn't run prisma generate)
 try {
-  execSync(prismaCmd, {
-    cwd: __dirname,
-    stdio: 'inherit',
-    env: process.env,
-    timeout: 90000,
-  });
+  runPrisma('generate');
+  console.log('[NorTaxiGo] prisma generate done.');
+} catch (e) {
+  console.error('[NorTaxiGo] prisma generate failed (may already be generated):', e.message);
+}
+
+// Push schema to database
+try {
+  runPrisma('db push --skip-generate');
   console.log('[NorTaxiGo] Database ready.');
 } catch (e) {
   console.error('[NorTaxiGo] prisma db push failed:', e.message);
-  console.error('[NorTaxiGo] Continuing anyway — tables may already exist.');
+  console.error('[NorTaxiGo] Continuing — tables may already exist.');
 }
 
-// Verify dist/index.js exists before requiring
 const serverEntry = path.join(__dirname, 'dist', 'index.js');
 if (!fs.existsSync(serverEntry)) {
   console.error('[NorTaxiGo] FATAL: dist/index.js not found at', serverEntry);

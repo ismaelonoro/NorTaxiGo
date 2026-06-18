@@ -164,11 +164,10 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     fabric.Image.fromURL(dataURL).then((img) => {
       const scaleX = CANVAS_WIDTH / (img.width ?? 1);
       const scaleY = CANVAS_HEIGHT / (img.height ?? 1);
-      img.set({ scaleX, scaleY, left: 0, top: 0, selectable: false, evented: false });
-      const prev = canvas.getObjects().find((o) => (o as fabric.Image & { isBg?: boolean }).isBg);
-      if (prev) canvas.remove(prev);
-      (img as fabric.Image & { isBg?: boolean }).isBg = true;
-      canvas.insertAt(0, img);
+      img.set({ scaleX, scaleY, left: 0, top: 0, originX: 'left', originY: 'top' });
+      // Use Fabric's native background: never selectable/movable, always behind
+      // every object, and serialized/restored correctly by toJSON/loadFromJSON.
+      canvas.backgroundImage = img;
       canvas.renderAll();
     });
   }, []);
@@ -176,8 +175,7 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
   const setBackgroundColor = useCallback((color: string) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    const prev = canvas.getObjects().find((o) => (o as fabric.Image & { isBg?: boolean }).isBg);
-    if (prev) canvas.remove(prev);
+    canvas.backgroundImage = undefined;
     canvas.backgroundColor = color;
     canvas.renderAll();
   }, []);

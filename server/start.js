@@ -60,8 +60,11 @@ console.log('[NorTaxiGo] prisma CLI :', prismaCliJs || '(not found, will use npx
 console.log('[NorTaxiGo] schema     :', fs.existsSync(schemaPath) ? schemaPath : '(not found)');
 
 function runPrisma(subCmd) {
+  // Use the absolute path to the current node binary: on Hostinger 'node' is
+  // not on the shell PATH (db push failed with 127 "node: command not found").
+  const nodeBin = process.execPath;
   const cmd = prismaCliJs
-    ? `node "${prismaCliJs}" ${subCmd}${schemaArg}`
+    ? `"${nodeBin}" "${prismaCliJs}" ${subCmd}${schemaArg}`
     : `npx prisma ${subCmd}${schemaArg}`;
   console.log(`[NorTaxiGo] Running: ${cmd}`);
   // Capture output so we can see WHY it fails (stdio:'inherit' was swallowing it)

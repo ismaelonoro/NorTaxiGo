@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { AUTH_COOKIE, authToken, cookieOptions, isAuthenticated } from '../lib/auth';
 
 const router = Router();
 
@@ -13,21 +14,20 @@ router.post('/login', (req, res) => {
   }
 
   if (username === validUser && password === validPass) {
-    req.session.authenticated = true;
+    res.cookie(AUTH_COOKIE, authToken(), cookieOptions());
     res.json({ ok: true });
   } else {
     res.status(401).json({ error: 'Credenciales incorrectas' });
   }
 });
 
-router.post('/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.json({ ok: true });
-  });
+router.post('/logout', (_req, res) => {
+  res.clearCookie(AUTH_COOKIE, { path: '/' });
+  res.json({ ok: true });
 });
 
 router.get('/me', (req, res) => {
-  res.json({ authenticated: !!req.session.authenticated });
+  res.json({ authenticated: isAuthenticated(req) });
 });
 
 export default router;

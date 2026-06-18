@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { useDesigner } from '@/components/designer/useDesigner';
+import { useDesigner, CANVAS_WIDTH, CANVAS_HEIGHT } from '@/components/designer/useDesigner';
 import Toolbar from '@/components/designer/Toolbar';
 import PropertiesPanel from '@/components/designer/PropertiesPanel';
 import {
@@ -21,7 +21,8 @@ export default function DesignerPage() {
   const { id } = useParams<{ id?: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const mode: Mode = (searchParams.get('mode') as Mode) ?? 'instance';
+  const location = useLocation();
+  const mode: Mode = location.pathname.startsWith('/plantillas') ? 'template' : 'instance';
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const designer = useDesigner(canvasRef);
@@ -36,6 +37,10 @@ export default function DesignerPage() {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [entityId, setEntityId] = useState<string | null>(id ?? null);
 
+  // Pending design to load once canvas is ready
+  const pendingDesign = useRef<string | null>(null);
+
+  // Step 1: fetch metadata (name, categories, folders, design JSON)
   useEffect(() => {
     const init = async () => {
       const [cats, fols] = await Promise.all([getCategories(), getFolders()]);
@@ -48,30 +53,54 @@ export default function DesignerPage() {
             const t = await getTemplate(id);
             setName(t.name);
             setCategoryId(t.categoryId);
-            setTimeout(() => designer.loadFromJSON(t.design), 100);
+            pendingDesign.current = t.design;
           } else {
             const inst = await getInstance(id);
             setName(inst.name);
             setFolderId(inst.folderId ?? '');
-            setTimeout(() => designer.loadFromJSON(inst.design), 100);
+            pendingDesign.current = inst.design;
           }
         } catch {
           toast.error('No se pudo cargar el diseño');
         }
       } else if (mode === 'instance') {
-        // Load from template if templateId provided
         const templateId = searchParams.get('templateId');
         if (templateId) {
           try {
             const t = await getTemplate(templateId);
-            setTimeout(() => designer.loadFromJSON(t.design), 100);
+            pendingDesign.current = t.design;
           } catch {}
         }
       }
+
       setLoading(false);
     };
     init();
   }, []);
+
+  // Step 2: once canvas is ready AND data has loaded, apply the design
+  useEffect(() => {
+    if (!designer.ready || loading) return;
+    if (pendingDesign.current) {
+      designer.loadFromJSON(pendingDesign.current);
+      pendingDesign.current = null;
+    }
+  }, [designer.ready, loading]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().includes('MAC');
+      const ctrl = isMac ? e.metaKey : e.ctrlKey;
+      if (!ctrl) return;
+      // Don't fire when user is typing inside an input/textarea
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) return;
+      if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); designer.undo(); }
+      if ((e.key === 'z' && e.shiftKey) || e.key === 'y') { e.preventDefault(); designer.redo(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [designer.undo, designer.redo]);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -98,7 +127,7 @@ export default function DesignerPage() {
         } else {
           const t = await createTemplate({ name, categoryId, design, thumbnail });
           setEntityId(t.id);
-          navigate(`/plantillas/${t.id}?mode=template`, { replace: true });
+          navigate(`/plantillas/${t.id}`, { replace: true });
         }
         toast.success('Plantilla guardada');
       } else {
@@ -137,7 +166,6 @@ export default function DesignerPage() {
     <div className="flex h-screen overflow-hidden bg-gray-50">
       {/* Left toolbar */}
       <aside className="w-52 shrink-0 bg-white border-r border-gray-100 overflow-y-auto">
-        {/* Header */}
         <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-100">
           <button
             onClick={() => navigate(backUrl)}
@@ -148,7 +176,6 @@ export default function DesignerPage() {
           <span className="text-xs font-medium text-gray-700 truncate">{title}</span>
         </div>
 
-        {/* Name field */}
         <div className="p-3 border-b border-gray-100">
           <label className="label text-[10px]">
             {mode === 'template' ? 'Nombre de plantilla' : 'Nombre de tarjeta'}
@@ -199,23 +226,33 @@ export default function DesignerPage() {
         />
       </aside>
 
-      {/* Canvas area */}
-      <div className="flex-1 flex items-center justify-center overflow-auto p-8 bg-gray-100">
-        {loading ? (
-          <div className="text-gray-400">
-            <Spinner size={32} />
-          </div>
-        ) : (
+      {/* Canvas area — canvas is always mounted (needed for Fabric), shown/hidden via opacity */}
+      <div className="flex-1 overflow-auto bg-gray-100">
+        <div className="min-h-full flex items-center justify-center p-10">
+          {loading && (
+            <div className="absolute text-gray-400">
+              <Spinner size={32} />
+            </div>
+          )}
+          {/* CSS zoom wrapper — canvas coords stay in document units (794×1123) */}
           <div
-            className="shadow-2xl rounded-sm"
-            style={{ lineHeight: 0 }}
+            style={{
+              transform: `scale(${designer.zoom})`,
+              transformOrigin: 'top center',
+              // Reserve space so the scrollable area knows the scaled size
+              width: CANVAS_WIDTH,
+              height: CANVAS_HEIGHT,
+              marginBottom: `${CANVAS_HEIGHT * (designer.zoom - 1)}px`,
+            }}
           >
-            <canvas ref={canvasRef} />
+            <div className="shadow-2xl ring-1 ring-gray-300" style={{ lineHeight: 0, display: 'inline-block' }}>
+              <canvas ref={canvasRef} />
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Right properties */}
+      {/* Right properties panel */}
       {designer.selected && (
         <aside className="w-48 shrink-0 bg-white border-l border-gray-100 overflow-y-auto">
           <PropertiesPanel
@@ -225,7 +262,6 @@ export default function DesignerPage() {
         </aside>
       )}
 
-      {/* Save modal — opens only if no name yet */}
       <Modal open={showSaveModal} onClose={() => setShowSaveModal(false)} title="Guardar diseño" size="sm">
         <div className="p-5 space-y-4">
           <div>

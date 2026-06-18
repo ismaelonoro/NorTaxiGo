@@ -136,7 +136,7 @@ function TemplateCard({
     <div className="card group">
       {/* Thumbnail */}
       <div
-        className="aspect-[3/4] bg-cream-100 rounded-t-xl overflow-hidden cursor-pointer"
+        className="aspect-[3/4] bg-cream-100 rounded-t-xl overflow-hidden cursor-pointer border-b border-gray-200"
         onClick={onEdit}
       >
         {template.thumbnail ? (

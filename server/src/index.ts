@@ -9,8 +9,9 @@ import instancesRouter from './routes/instances';
 import aiRouter from './routes/ai';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+const PORT = process.env.PORT || 3000;
+// In production the client is served from the same origin, so CORS is open
+const CLIENT_URL = process.env.CLIENT_URL || '*';
 
 app.use(cors({ origin: CLIENT_URL }));
 app.use(express.json({ limit: '50mb' }));

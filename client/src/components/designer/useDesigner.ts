@@ -21,10 +21,20 @@ export type SelectedObjectProps = {
   opacity: number;
 };
 
+const MAX_HISTORY = 50;
+
 export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
   const fabricRef = useRef<fabric.Canvas | null>(null);
   const [selected, setSelected] = useState<SelectedObjectProps | null>(null);
   const [zoom, setZoom] = useState(0.65);
+  const [ready, setReady] = useState(false);
+
+  // Undo/redo history
+  const historyRef = useRef<string[]>([]);
+  const historyIndexRef = useRef(-1);
+  const isRestoringRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const getProps = useCallback((obj: fabric.Object): SelectedObjectProps => {
     const base = {
@@ -53,14 +63,39 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
 
   useEffect(() => {
     if (!canvasRef.current) return;
+
+    // Canvas always at full logical size; zoom is handled by CSS transform on the wrapper
     const canvas = new fabric.Canvas(canvasRef.current, {
-      width: CANVAS_WIDTH * zoom,
-      height: CANVAS_HEIGHT * zoom,
+      width: CANVAS_WIDTH,
+      height: CANVAS_HEIGHT,
       backgroundColor: '#ffffff',
       preserveObjectStacking: true,
     });
-    canvas.setZoom(zoom);
+
     fabricRef.current = canvas;
+
+    const saveSnapshot = () => {
+      if (isRestoringRef.current) return;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        const json = JSON.stringify(canvas.toJSON());
+        const history = historyRef.current;
+        const idx = historyIndexRef.current;
+        // Drop any redo states ahead of current position
+        const next = history.slice(0, idx + 1);
+        next.push(json);
+        if (next.length > MAX_HISTORY) next.shift();
+        historyRef.current = next;
+        historyIndexRef.current = next.length - 1;
+        setHistoryIndex(next.length - 1);
+      }, 250);
+    };
+
+    canvas.on('object:added', saveSnapshot);
+    canvas.on('object:removed', saveSnapshot);
+    canvas.on('object:modified', saveSnapshot);
+
+    setReady(true);
 
     canvas.on('selection:created', (e) => {
       if (e.selected?.[0]) setSelected(getProps(e.selected[0]));
@@ -73,8 +108,15 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
       if (e.target) setSelected(getProps(e.target));
     });
 
-    return () => { canvas.dispose(); };
-  }, []);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      canvas.dispose();
+      fabricRef.current = null;
+      historyRef.current = [];
+      historyIndexRef.current = -1;
+      setReady(false);
+    };
+  }, [getProps]);
 
   const addText = useCallback((text = 'Escribe aquí', options: Partial<fabric.Textbox> = {}) => {
     const canvas = fabricRef.current;
@@ -98,56 +140,44 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     const canvas = fabricRef.current;
     if (!canvas) return;
     const dataURL = await generateQRDataURL(url, 400, darkColor, lightColor);
-    const imgEl = new Image();
-    imgEl.onload = () => {
-      const img = new fabric.Image(imgEl, { left: 280, top: 400, scaleX: 0.5, scaleY: 0.5 });
+    fabric.Image.fromURL(dataURL).then((img) => {
+      img.set({ left: 280, top: 400, scaleX: 0.5, scaleY: 0.5 });
       canvas.add(img);
       canvas.setActiveObject(img);
       canvas.renderAll();
-    };
-    imgEl.src = dataURL;
+    });
   }, []);
 
   const addImageFromURL = useCallback((dataURL: string, opts?: Partial<fabric.Image>) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    const imgEl = new Image();
-    imgEl.onload = () => {
-      const img = new fabric.Image(imgEl, {
-        left: 0, top: 0,
-        selectable: true,
-        ...opts,
-      });
+    fabric.Image.fromURL(dataURL).then((img) => {
+      img.set({ left: 0, top: 0, selectable: true, ...opts });
       canvas.add(img);
       canvas.renderAll();
-    };
-    imgEl.src = dataURL;
+    });
   }, []);
 
   const setBackground = useCallback((dataURL: string) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    const imgEl = new Image();
-    imgEl.onload = () => {
-      const img = new fabric.Image(imgEl);
+    fabric.Image.fromURL(dataURL).then((img) => {
       const scaleX = CANVAS_WIDTH / (img.width ?? 1);
       const scaleY = CANVAS_HEIGHT / (img.height ?? 1);
       img.set({ scaleX, scaleY, left: 0, top: 0, selectable: false, evented: false });
-      // Remove previous background image
-      const bg = canvas.getObjects().find((o) => (o as fabric.Image & { isBg?: boolean }).isBg);
-      if (bg) canvas.remove(bg);
+      const prev = canvas.getObjects().find((o) => (o as fabric.Image & { isBg?: boolean }).isBg);
+      if (prev) canvas.remove(prev);
       (img as fabric.Image & { isBg?: boolean }).isBg = true;
       canvas.insertAt(0, img);
       canvas.renderAll();
-    };
-    imgEl.src = dataURL;
+    });
   }, []);
 
   const setBackgroundColor = useCallback((color: string) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    const bg = canvas.getObjects().find((o) => (o as fabric.Image & { isBg?: boolean }).isBg);
-    if (bg) canvas.remove(bg);
+    const prev = canvas.getObjects().find((o) => (o as fabric.Image & { isBg?: boolean }).isBg);
+    if (prev) canvas.remove(prev);
     canvas.backgroundColor = color;
     canvas.renderAll();
   }, []);
@@ -196,41 +226,77 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     canvas.renderAll();
   }, []);
 
-  const toJSON = useCallback(() => {
-    return JSON.stringify(fabricRef.current?.toJSON() ?? {});
-  }, []);
+  const toJSON = useCallback(() => JSON.stringify(fabricRef.current?.toJSON() ?? {}), []);
 
   const toDataURL = useCallback(() => {
-    const canvas = fabricRef.current;
-    if (!canvas) return '';
-    return canvas.toDataURL({ format: 'png', quality: 1, multiplier: 3 });
+    return fabricRef.current?.toDataURL({ format: 'png', quality: 1, multiplier: 3 }) ?? '';
   }, []);
 
   const toThumbnail = useCallback(() => {
-    const canvas = fabricRef.current;
-    if (!canvas) return '';
-    return canvas.toDataURL({ format: 'jpeg', quality: 0.7, multiplier: 0.3 });
+    return fabricRef.current?.toDataURL({ format: 'jpeg', quality: 0.7, multiplier: 0.3 }) ?? '';
   }, []);
 
   const loadFromJSON = useCallback((json: string) => {
     const canvas = fabricRef.current;
-    if (!canvas) return;
-    canvas.loadFromJSON(JSON.parse(json)).then(() => canvas.renderAll());
+    if (!canvas) return Promise.resolve();
+    // Loading external design resets history
+    isRestoringRef.current = true;
+    return canvas.loadFromJSON(JSON.parse(json)).then(() => {
+      canvas.renderAll();
+      const snapshot = JSON.stringify(canvas.toJSON());
+      historyRef.current = [snapshot];
+      historyIndexRef.current = 0;
+      setHistoryIndex(0);
+      isRestoringRef.current = false;
+    });
   }, []);
 
-  const changeZoom = useCallback((newZoom: number) => {
+  const undo = useCallback(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    setZoom(newZoom);
-    canvas.setDimensions({ width: CANVAS_WIDTH * newZoom, height: CANVAS_HEIGHT * newZoom });
-    canvas.setZoom(newZoom);
-    canvas.renderAll();
+    const idx = historyIndexRef.current;
+    if (idx <= 0) return;
+    const prev = historyRef.current[idx - 1];
+    isRestoringRef.current = true;
+    canvas.loadFromJSON(JSON.parse(prev)).then(() => {
+      canvas.renderAll();
+      historyIndexRef.current = idx - 1;
+      setHistoryIndex(idx - 1);
+      canvas.discardActiveObject();
+      setSelected(null);
+      isRestoringRef.current = false;
+    });
   }, []);
 
+  const redo = useCallback(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const idx = historyIndexRef.current;
+    if (idx >= historyRef.current.length - 1) return;
+    const next = historyRef.current[idx + 1];
+    isRestoringRef.current = true;
+    canvas.loadFromJSON(JSON.parse(next)).then(() => {
+      canvas.renderAll();
+      historyIndexRef.current = idx + 1;
+      setHistoryIndex(idx + 1);
+      canvas.discardActiveObject();
+      setSelected(null);
+      isRestoringRef.current = false;
+    });
+  }, []);
+
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < historyRef.current.length - 1;
+
+  // Zoom only changes CSS scale — canvas coordinates stay in document units
+  const changeZoom = useCallback((z: number) => setZoom(z), []);
+
   return {
-    canvas: fabricRef.current,
+    ready,
     selected,
     zoom,
+    canUndo,
+    canRedo,
     addText,
     addQR,
     addImageFromURL,
@@ -244,6 +310,8 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     toDataURL,
     toThumbnail,
     loadFromJSON,
+    undo,
+    redo,
     changeZoom,
   };
 }

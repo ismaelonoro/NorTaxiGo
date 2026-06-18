@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import {
   Type, QrCode, ImageIcon, Palette, Wand2, Trash2,
   ArrowUp, ArrowDown, ZoomIn, ZoomOut, Save, Download, ChevronDown,
+  Undo2, Redo2,
 } from 'lucide-react';
 import type { useDesigner } from './useDesigner';
 import { generateBackground } from '@/lib/api';
@@ -95,6 +96,25 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
             <Download size={13} /> Descargar PDF
           </button>
         )}
+        {/* Undo / Redo */}
+        <div className="flex gap-1">
+          <button
+            onClick={designer.undo}
+            disabled={!designer.canUndo}
+            title="Deshacer (Ctrl+Z)"
+            className="btn-ghost flex-1 justify-center text-xs py-1.5 disabled:opacity-30"
+          >
+            <Undo2 size={13} />
+          </button>
+          <button
+            onClick={designer.redo}
+            disabled={!designer.canRedo}
+            title="Rehacer (Ctrl+Shift+Z)"
+            className="btn-ghost flex-1 justify-center text-xs py-1.5 disabled:opacity-30"
+          >
+            <Redo2 size={13} />
+          </button>
+        </div>
       </div>
 
       {/* Zoom */}

@@ -45,12 +45,8 @@ export default function InstancesPage() {
         width: 794,
         height: 1123,
       });
-      await new Promise<void>((resolve) => {
-        tempCanvas.loadFromJSON(JSON.parse(instance.design), () => {
-          tempCanvas.renderAll();
-          resolve();
-        });
-      });
+      await tempCanvas.loadFromJSON(JSON.parse(instance.design));
+      tempCanvas.renderAll();
       const dataURL = tempCanvas.toDataURL({ format: 'png', quality: 1, multiplier: 3 });
       await exportCanvasToPDF(dataURL, instance.name);
       tempCanvas.dispose();
@@ -169,7 +165,7 @@ function InstanceCard({
 }) {
   return (
     <div className="card group">
-      <div className="aspect-[3/4] bg-cream-100 rounded-t-xl overflow-hidden cursor-pointer" onClick={onEdit}>
+      <div className="aspect-[3/4] bg-cream-100 rounded-t-xl overflow-hidden cursor-pointer border-b border-gray-200" onClick={onEdit}>
         {instance.thumbnail ? (
           <img
             src={instance.thumbnail}

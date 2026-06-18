@@ -12,6 +12,12 @@ console.log('[NorTaxiGo] NODE_ENV  :', process.env.NODE_ENV);
 console.log('[NorTaxiGo] PORT      :', process.env.PORT);
 console.log('[NorTaxiGo] DB_URL set:', !!process.env.DATABASE_URL);
 
+// Default DATABASE_URL if not provided (SQLite next to this file)
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = 'file:' + path.join(__dirname, 'prod.db');
+  console.log('[NorTaxiGo] DATABASE_URL defaulted to:', process.env.DATABASE_URL);
+}
+
 // Fix relative SQLite path: resolve it to an absolute path based on this file's location
 // so it works regardless of Hostinger's working directory
 if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('file:./')) {

@@ -12,16 +12,8 @@ export default function Sidebar() {
   return (
     <aside className="w-56 shrink-0 bg-white border-r border-gray-100 flex flex-col h-screen sticky top-0">
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-gray-100">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-gold-500 rounded-lg flex items-center justify-center text-white text-base">
-            🚕
-          </div>
-          <div>
-            <p className="text-sm font-bold text-gray-900 leading-none">NorTaxiGo</p>
-            <p className="text-[10px] text-gray-400 mt-0.5 font-display italic">diseñador</p>
-          </div>
-        </div>
+      <div className="px-4 py-5 border-b border-gray-100 flex justify-center">
+        <img src="/logo.png" alt="NorTaxiGo" className="h-24 w-auto" />
       </div>
 
       {/* Navigation */}

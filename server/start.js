@@ -24,18 +24,25 @@ console.log('[NorTaxiGo] DB_URL set:', !!process.env.DATABASE_URL);
 // Log all env keys so we can spot port-related vars Hostinger might inject
 console.log('[NorTaxiGo] env keys  :', Object.keys(process.env).sort().join(', '));
 
-// Default DATABASE_URL to an absolute SQLite path next to this file
-if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = 'file:' + path.join(__dirname, 'prod.db');
-  console.log('[NorTaxiGo] DATABASE_URL defaulted to:', process.env.DATABASE_URL);
-}
-
-// Fix relative sqlite path to absolute
-if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('file:./')) {
-  const rel = process.env.DATABASE_URL.replace('file:./', '');
-  const abs = path.join(__dirname, rel);
-  process.env.DATABASE_URL = 'file:' + abs;
-  console.log('[NorTaxiGo] DATABASE_URL resolved to:', process.env.DATABASE_URL);
+// Normalize DATABASE_URL so Prisma always gets a valid absolute `file:` URL.
+// Prisma REQUIRES the `file:` prefix; node:sqlite tolerates a bare path, which
+// is why a misconfigured URL can create tables yet crash Prisma on startup.
+{
+  let raw = process.env.DATABASE_URL;
+  if (!raw) {
+    // No env var: default next to this file
+    process.env.DATABASE_URL = 'file:' + path.join(__dirname, 'prod.db');
+    console.log('[NorTaxiGo] DATABASE_URL defaulted to:', process.env.DATABASE_URL);
+  } else {
+    // Strip an optional file: prefix, resolve to absolute, then re-add file:
+    let p = raw.startsWith('file:') ? raw.slice('file:'.length) : raw;
+    if (!path.isAbsolute(p)) p = path.join(__dirname, p);
+    const normalized = 'file:' + p;
+    if (normalized !== raw) {
+      console.log('[NorTaxiGo] DATABASE_URL normalized to:', normalized);
+    }
+    process.env.DATABASE_URL = normalized;
+  }
 }
 
 // Find the Prisma CLI JS entry point directly (avoid unreliable shell wrappers)
@@ -147,4 +154,12 @@ if (!fs.existsSync(serverEntry)) {
 }
 
 console.log('[NorTaxiGo] Starting server from:', serverEntry);
-require(serverEntry);
+try {
+  require(serverEntry);
+} catch (e) {
+  // A synchronous failure while loading the server (e.g. Prisma client init)
+  // would otherwise die silently here — surface it explicitly.
+  console.error('[NorTaxiGo] FATAL while loading server:', e.message);
+  console.error(e.stack);
+  process.exit(1);
+}

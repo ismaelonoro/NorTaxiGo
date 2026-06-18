@@ -66,12 +66,75 @@ try {
 }
 
 // Push schema to database
+let dbPushOk = false;
 try {
   runPrisma('db push --skip-generate');
-  console.log('[NorTaxiGo] Database ready.');
+  console.log('[NorTaxiGo] Database ready via prisma db push.');
+  dbPushOk = true;
 } catch (e) {
   console.error('[NorTaxiGo] prisma db push failed:', e.message);
-  console.error('[NorTaxiGo] Continuing — tables may already exist.');
+}
+
+// Fallback: create tables directly using node:sqlite (Node 22+)
+if (!dbPushOk) {
+  console.log('[NorTaxiGo] Attempting table creation via node:sqlite fallback...');
+  try {
+    const { DatabaseSync } = require('node:sqlite');
+    const dbFilePath = process.env.DATABASE_URL.replace(/^file:/, '');
+    const db = new DatabaseSync(dbFilePath);
+    db.exec(`
+      PRAGMA journal_mode=WAL;
+      PRAGMA foreign_keys=ON;
+
+      CREATE TABLE IF NOT EXISTS "Category" (
+        "id"        TEXT NOT NULL PRIMARY KEY,
+        "name"      TEXT NOT NULL,
+        "icon"      TEXT NOT NULL DEFAULT '🎉',
+        "color"     TEXT NOT NULL DEFAULT '#6B7280',
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS "Template" (
+        "id"         TEXT NOT NULL PRIMARY KEY,
+        "name"       TEXT NOT NULL,
+        "categoryId" TEXT NOT NULL,
+        "design"     TEXT NOT NULL DEFAULT '{}',
+        "thumbnail"  TEXT,
+        "createdAt"  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt"  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "Template_categoryId_fkey"
+          FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE CASCADE ON UPDATE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS "Folder" (
+        "id"        TEXT NOT NULL PRIMARY KEY,
+        "name"      TEXT NOT NULL,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS "Instance" (
+        "id"         TEXT NOT NULL PRIMARY KEY,
+        "name"       TEXT NOT NULL,
+        "folderId"   TEXT,
+        "templateId" TEXT,
+        "design"     TEXT NOT NULL DEFAULT '{}',
+        "thumbnail"  TEXT,
+        "createdAt"  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt"  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "Instance_folderId_fkey"
+          FOREIGN KEY ("folderId") REFERENCES "Folder"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+        CONSTRAINT "Instance_templateId_fkey"
+          FOREIGN KEY ("templateId") REFERENCES "Template"("id") ON DELETE SET NULL ON UPDATE CASCADE
+      );
+    `);
+    db.close();
+    console.log('[NorTaxiGo] Tables ensured via node:sqlite.');
+  } catch (e2) {
+    console.error('[NorTaxiGo] node:sqlite fallback failed:', e2.message);
+    console.error('[NorTaxiGo] Continuing — tables may already exist or DB will fail at query time.');
+  }
 }
 
 const serverEntry = path.join(__dirname, 'dist', 'index.js');

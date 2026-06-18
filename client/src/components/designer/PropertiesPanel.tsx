@@ -1,9 +1,5 @@
 import type { SelectedObjectProps } from './useDesigner';
-
-const FONTS = [
-  'Georgia', 'Playfair Display', 'Arial', 'Times New Roman',
-  'Courier New', 'Trebuchet MS', 'Verdana', 'Impact',
-];
+import FontPicker from './FontPicker';
 
 interface Props {
   selected: SelectedObjectProps;
@@ -84,15 +80,10 @@ export default function PropertiesPanel({ selected, onChange }: Props) {
 
           <div>
             <label className="label text-[10px]">Fuente</label>
-            <select
-              className="input text-xs py-1.5"
+            <FontPicker
               value={selected.fontFamily ?? 'Georgia'}
-              onChange={(e) => onChange({ fontFamily: e.target.value })}
-            >
-              {FONTS.map((f) => (
-                <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>
-              ))}
-            </select>
+              onChange={(font) => onChange({ fontFamily: font })}
+            />
           </div>
 
           <div>

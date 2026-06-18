@@ -188,7 +188,14 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
       (obj as fabric.Textbox).set('text', props.text);
     }
     if (props.fontSize !== undefined) (obj as fabric.Textbox).set('fontSize', props.fontSize);
-    if (props.fontFamily !== undefined) (obj as fabric.Textbox).set('fontFamily', props.fontFamily);
+    if (props.fontFamily !== undefined) {
+      const fam = props.fontFamily;
+      (obj as fabric.Textbox).set('fontFamily', fam);
+      // Ensure the web font is loaded, then repaint so it actually renders
+      if (document.fonts?.load) {
+        document.fonts.load(`32px "${fam}"`).then(() => canvas.renderAll()).catch(() => {});
+      }
+    }
     if (props.fill !== undefined) obj.set('fill', props.fill);
     if (props.fontWeight !== undefined) (obj as fabric.Textbox).set('fontWeight', props.fontWeight as 'normal' | 'bold');
     if (props.fontStyle !== undefined) (obj as fabric.Textbox).set('fontStyle', props.fontStyle as 'normal' | 'italic');
@@ -241,6 +248,10 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     isRestoringRef.current = true;
     return canvas.loadFromJSON(JSON.parse(json)).then(() => {
       canvas.renderAll();
+      // Web fonts in the saved design may not be ready yet — repaint once loaded
+      if (document.fonts?.ready) {
+        document.fonts.ready.then(() => canvas.renderAll()).catch(() => {});
+      }
       const snapshot = JSON.stringify(canvas.toJSON());
       historyRef.current = [snapshot];
       historyIndexRef.current = 0;

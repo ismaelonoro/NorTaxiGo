@@ -34,6 +34,17 @@ if (process.env.NODE_ENV === 'production') {
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
-app.listen(PORT, () => {
-  console.log(`🚕 NorTaxiGo server running on http://localhost:${PORT}`);
+const server = app.listen(PORT, () => {
+  const addr = server.address();
+  console.log(`🚕 NorTaxiGo server running on http://localhost:${PORT} — bound:`, JSON.stringify(addr));
+});
+
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    // Another worker is already on this port — exit cleanly (code 0 = no restart)
+    console.log(`[NorTaxiGo] Port ${PORT} already in use — exiting cleanly (another worker is running).`);
+    process.exit(0);
+  }
+  console.error('[NorTaxiGo] Server error:', err);
+  process.exit(1);
 });

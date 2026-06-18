@@ -21,6 +21,8 @@ console.log('[NorTaxiGo] cwd       :', process.cwd());
 console.log('[NorTaxiGo] NODE_ENV  :', process.env.NODE_ENV);
 console.log('[NorTaxiGo] PORT      :', process.env.PORT);
 console.log('[NorTaxiGo] DB_URL set:', !!process.env.DATABASE_URL);
+// Log all env keys so we can spot port-related vars Hostinger might inject
+console.log('[NorTaxiGo] env keys  :', Object.keys(process.env).sort().join(', '));
 
 // Default DATABASE_URL to an absolute SQLite path next to this file
 if (!process.env.DATABASE_URL) {

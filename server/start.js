@@ -57,15 +57,7 @@ function runPrisma(subCmd) {
   execSync(cmd, { cwd: __dirname, stdio: 'inherit', env: process.env, timeout: 120000 });
 }
 
-// Generate client (needed if build didn't run prisma generate)
-try {
-  runPrisma('generate');
-  console.log('[NorTaxiGo] prisma generate done.');
-} catch (e) {
-  console.error('[NorTaxiGo] prisma generate failed (may already be generated):', e.message);
-}
-
-// Push schema to database
+// Push schema to database (prisma generate runs during build, not here)
 let dbPushOk = false;
 try {
   runPrisma('db push --skip-generate');

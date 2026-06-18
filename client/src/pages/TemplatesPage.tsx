@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, Search } from 'lucide-react';
-import { getTemplates, getCategories, deleteTemplate } from '@/lib/api';
+import { Plus, Pencil, Trash2, Search, Copy } from 'lucide-react';
+import { getTemplates, getCategories, deleteTemplate, createTemplate } from '@/lib/api';
 import type { Template, Category } from '@/types';
 import EmptyState from '@/components/ui/EmptyState';
 import Spinner from '@/components/ui/Spinner';
+import Modal from '@/components/ui/Modal';
 import toast from 'react-hot-toast';
 
 export default function TemplatesPage() {
@@ -14,6 +15,9 @@ export default function TemplatesPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [duplicating, setDuplicating] = useState<Template | null>(null);
+  const [newName, setNewName] = useState('');
+  const [savingCopy, setSavingCopy] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -33,6 +37,31 @@ export default function TemplatesPage() {
     await deleteTemplate(id);
     toast.success('Plantilla eliminada');
     load();
+  };
+
+  const openDuplicate = (template: Template) => {
+    setDuplicating(template);
+    setNewName(`Copia de ${template.name}`);
+  };
+
+  const confirmDuplicate = async () => {
+    if (!duplicating || !newName.trim()) return;
+    setSavingCopy(true);
+    try {
+      await createTemplate({
+        name: newName.trim(),
+        categoryId: duplicating.categoryId,
+        design: duplicating.design,
+        thumbnail: duplicating.thumbnail,
+      });
+      toast.success('Plantilla duplicada');
+      setDuplicating(null);
+      load();
+    } catch {
+      toast.error('Error al duplicar la plantilla');
+    } finally {
+      setSavingCopy(false);
+    }
   };
 
   const filtered = templates.filter((t) =>
@@ -114,11 +143,45 @@ export default function TemplatesPage() {
               key={template.id}
               template={template}
               onEdit={() => navigate(`/plantillas/${template.id}`)}
+              onDuplicate={() => openDuplicate(template)}
               onDelete={() => handleDelete(template.id, template.name)}
             />
           ))}
         </div>
       )}
+
+      {/* Duplicate modal */}
+      <Modal
+        open={duplicating !== null}
+        onClose={() => setDuplicating(null)}
+        title="Duplicar plantilla"
+        size="sm"
+      >
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="label text-xs">Nombre de la copia</label>
+            <input
+              autoFocus
+              className="input w-full"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && confirmDuplicate()}
+            />
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setDuplicating(null)} className="btn-ghost text-xs py-2">
+              Cancelar
+            </button>
+            <button
+              onClick={confirmDuplicate}
+              disabled={savingCopy || !newName.trim()}
+              className="btn-primary text-xs py-2 disabled:opacity-50"
+            >
+              {savingCopy ? <Spinner size={13} /> : <Copy size={13} />} Duplicar
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -126,10 +189,12 @@ export default function TemplatesPage() {
 function TemplateCard({
   template,
   onEdit,
+  onDuplicate,
   onDelete,
 }: {
   template: Template;
   onEdit: () => void;
+  onDuplicate: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -167,6 +232,13 @@ function TemplateCard({
         <div className="flex gap-1.5 mt-3">
           <button onClick={onEdit} className="btn-secondary flex-1 justify-center text-xs py-1.5">
             <Pencil size={12} /> Editar
+          </button>
+          <button
+            onClick={onDuplicate}
+            title="Duplicar"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gold-600 hover:bg-gold-50 transition-colors"
+          >
+            <Copy size={14} />
           </button>
           <button onClick={onDelete} className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
             <Trash2 size={14} />

@@ -21,13 +21,18 @@ export default function TemplatesPage() {
 
   const load = async () => {
     setLoading(true);
-    const [t, c] = await Promise.all([
-      getTemplates(selectedCategory || undefined),
-      getCategories(),
-    ]);
-    setTemplates(t);
-    setCategories(c);
-    setLoading(false);
+    try {
+      const [t, c] = await Promise.all([
+        getTemplates(selectedCategory || undefined),
+        getCategories(),
+      ]);
+      setTemplates(t);
+      setCategories(c);
+    } catch {
+      toast.error('Error al cargar las plantillas');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, [selectedCategory]);

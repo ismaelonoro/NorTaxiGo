@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import prisma from './lib/prisma';
+import db, { newId, nowISO } from './lib/db';
 
 // Fabric.js canvas JSON for a wedding template inspired by the Villa Laureana example:
 // - White background
@@ -180,49 +180,41 @@ const WEDDING_TEMPLATE_DESIGN = JSON.stringify({
   background: '#ffffff',
 });
 
-async function seed() {
+function seed() {
   console.log('🌱 Seeding database...');
 
-  await prisma.template.deleteMany();
-  await prisma.category.deleteMany();
-  await prisma.folder.deleteMany();
+  db.exec('DELETE FROM "Template"; DELETE FROM "Category"; DELETE FROM "Folder";');
 
-  const [bodas] = await Promise.all([
-    prisma.category.create({ data: { name: 'Bodas', icon: '💍', color: '#D4AF37' } }),
-  ]);
+  const insertCategory = db.prepare(`
+    INSERT INTO "Category" (id, name, icon, color, "createdAt", "updatedAt")
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const insertFolder = db.prepare('INSERT INTO "Folder" (id, name, "createdAt", "updatedAt") VALUES (?, ?, ?, ?)');
+  const insertTemplate = db.prepare(`
+    INSERT INTO "Template" (id, name, "categoryId", design, thumbnail, "createdAt", "updatedAt")
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
 
-  await prisma.category.createMany({
-    data: [
-      { name: 'Eventos corporativos', icon: '🏢', color: '#3B82F6' },
-      { name: 'Cumpleaños', icon: '🎂', color: '#EC4899' },
-      { name: 'Comuniones y bautizos', icon: '⛪', color: '#8B5CF6' },
-      { name: 'Fiestas privadas', icon: '🎊', color: '#F97316' },
-      { name: 'Otros eventos', icon: '🎉', color: '#6B7280' },
-    ],
-  });
+  const ts = nowISO();
+  const bodasId = newId();
+  insertCategory.run(bodasId, 'Bodas', '💍', '#D4AF37', ts, ts);
+  for (const c of [
+    { name: 'Eventos corporativos', icon: '🏢', color: '#3B82F6' },
+    { name: 'Cumpleaños', icon: '🎂', color: '#EC4899' },
+    { name: 'Comuniones y bautizos', icon: '⛪', color: '#8B5CF6' },
+    { name: 'Fiestas privadas', icon: '🎊', color: '#F97316' },
+    { name: 'Otros eventos', icon: '🎉', color: '#6B7280' },
+  ]) {
+    insertCategory.run(newId(), c.name, c.icon, c.color, ts, ts);
+  }
 
-  await prisma.folder.createMany({
-    data: [
-      { name: 'Bodas 2025' },
-      { name: 'Eventos corporativos' },
-      { name: 'Sin carpeta' },
-    ],
-  });
+  for (const name of ['Bodas 2025', 'Eventos corporativos', 'Sin carpeta']) {
+    insertFolder.run(newId(), name, ts, ts);
+  }
 
-  await prisma.template.create({
-    data: {
-      name: 'Boda clásica',
-      categoryId: bodas.id,
-      design: WEDDING_TEMPLATE_DESIGN,
-    },
-  });
+  insertTemplate.run(newId(), 'Boda clásica', bodasId, WEDDING_TEMPLATE_DESIGN, null, ts, ts);
 
   console.log('✅ 6 categorías, 3 carpetas y 1 plantilla de ejemplo creadas');
-  await prisma.$disconnect();
 }
 
-seed().catch((e) => {
-  console.error(e);
-  prisma.$disconnect();
-  process.exit(1);
-});
+seed();

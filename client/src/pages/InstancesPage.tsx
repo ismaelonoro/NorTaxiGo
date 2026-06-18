@@ -20,13 +20,18 @@ export default function InstancesPage() {
 
   const load = async () => {
     setLoading(true);
-    const [i, f] = await Promise.all([
-      getInstances(selectedFolder || undefined),
-      getFolders(),
-    ]);
-    setInstances(i);
-    setFolders(f);
-    setLoading(false);
+    try {
+      const [i, f] = await Promise.all([
+        getInstances(selectedFolder || undefined),
+        getFolders(),
+      ]);
+      setInstances(i);
+      setFolders(f);
+    } catch {
+      toast.error('Error al cargar las noras');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, [selectedFolder]);

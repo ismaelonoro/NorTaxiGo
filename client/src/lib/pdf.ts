@@ -4,10 +4,14 @@ const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 
 /**
- * Build the A4 PDF and either:
+ * Build the A4 PDF ONCE, then either:
  *  - on touch devices that support it, open the native share sheet
- *    (iOS/Android) so the user can send it straight to WhatsApp, Mail, etc.
- *  - otherwise fall back to a classic file download (desktop behaviour).
+ *    (iOS/Android) so the user can send it to WhatsApp, Mail, Files…
+ *  - otherwise download it (desktop behaviour).
+ *
+ * The PDF is generated a single time and the resulting blob is reused for
+ * both paths — generating it twice (output + save) was the cause of the slow
+ * export.
  */
 export async function exportCanvasToPDF(dataURL: string, filename = 'nortaxigo'): Promise<void> {
   const pdf = new jsPDF({
@@ -20,11 +24,10 @@ export async function exportCanvasToPDF(dataURL: string, filename = 'nortaxigo')
   pdf.addImage(dataURL, 'PNG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
 
   const safeName = `${filename}.pdf`;
-  const blob = pdf.output('blob');
+  const blob = pdf.output('blob'); // generate once
   const file = new File([blob], safeName, { type: 'application/pdf' });
 
-  // Use the native share sheet on touch devices (lets you send to WhatsApp).
-  // Keep the classic download on desktop, where that's the expected behaviour.
+  // Native share sheet on touch devices (lets you send to WhatsApp, etc.)
   const isTouch = typeof window !== 'undefined'
     && window.matchMedia?.('(pointer: coarse)').matches;
   const canShareFile = typeof navigator !== 'undefined'
@@ -36,11 +39,18 @@ export async function exportCanvasToPDF(dataURL: string, filename = 'nortaxigo')
       await navigator.share({ files: [file], title: filename });
       return;
     } catch (e) {
-      // User dismissed the share sheet — don't also trigger a download
-      if ((e as Error).name === 'AbortError') return;
-      // Any other failure: fall through to download
+      if ((e as Error).name === 'AbortError') return; // user dismissed
+      // otherwise fall through to download
     }
   }
 
-  pdf.save(safeName);
+  // Download the already-generated blob (no second generation)
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = safeName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

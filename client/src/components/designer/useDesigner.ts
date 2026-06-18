@@ -234,9 +234,8 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
   const toJSON = useCallback(() => JSON.stringify(fabricRef.current?.toJSON() ?? {}), []);
 
   const toDataURL = useCallback(() => {
-    // multiplier 2 ≈ 190 dpi on A4: good print quality, and fast enough that
-    // mobile Web Share stays within the user-activation window.
-    return fabricRef.current?.toDataURL({ format: 'png', quality: 1, multiplier: 2 }) ?? '';
+    // multiplier 3 ≈ 285 dpi on A4 for crisp print quality
+    return fabricRef.current?.toDataURL({ format: 'png', quality: 1, multiplier: 3 }) ?? '';
   }, []);
 
   const toThumbnail = useCallback(() => {

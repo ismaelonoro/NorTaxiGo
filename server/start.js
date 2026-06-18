@@ -101,6 +101,15 @@ if (!dbPushOk) {
           FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE CASCADE ON UPDATE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS "Background" (
+        "id"        TEXT NOT NULL PRIMARY KEY,
+        "name"      TEXT NOT NULL,
+        "image"     TEXT NOT NULL,
+        "thumbnail" TEXT NOT NULL,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE TABLE IF NOT EXISTS "Folder" (
         "id"        TEXT NOT NULL PRIMARY KEY,
         "name"      TEXT NOT NULL,

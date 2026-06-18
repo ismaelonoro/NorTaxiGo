@@ -8,6 +8,7 @@ import categoriesRouter from './routes/categories';
 import templatesRouter from './routes/templates';
 import foldersRouter from './routes/folders';
 import instancesRouter from './routes/instances';
+import backgroundsRouter from './routes/backgrounds';
 import aiRouter from './routes/ai';
 
 const app = express();
@@ -31,6 +32,7 @@ app.use('/api/categories', categoriesRouter);
 app.use('/api/templates', templatesRouter);
 app.use('/api/folders', foldersRouter);
 app.use('/api/instances', instancesRouter);
+app.use('/api/backgrounds', backgroundsRouter);
 app.use('/api/ai', aiRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));

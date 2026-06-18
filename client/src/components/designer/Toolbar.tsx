@@ -1,11 +1,13 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Type, QrCode, ImageIcon, Palette, Wand2, Trash2,
   ArrowUp, ArrowDown, ZoomIn, ZoomOut, Save, Download, ChevronDown,
-  Undo2, Redo2,
+  Undo2, Redo2, Images,
 } from 'lucide-react';
 import type { useDesigner } from './useDesigner';
-import { generateBackground } from '@/lib/api';
+import { generateBackground, getBackgrounds, getBackground, createBackground } from '@/lib/api';
+import { makeThumbnail, fileToDataURL } from '@/lib/image';
+import type { Background } from '@/types';
 import Spinner from '@/components/ui/Spinner';
 import toast from 'react-hot-toast';
 
@@ -28,8 +30,36 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
   const [aiPrompt, setAiPrompt] = useState('');
   const [generatingAI, setGeneratingAI] = useState(false);
   const [bgColor, setBgColor] = useState('#ffffff');
+  const [gallery, setGallery] = useState<Background[]>([]);
+  const [loadingGallery, setLoadingGallery] = useState(false);
+  const [applyingBg, setApplyingBg] = useState<string | null>(null);
+  const [saveToGallery, setSaveToGallery] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Load the gallery the first time the background panel is opened
+  useEffect(() => {
+    if (showBgPanel && gallery.length === 0) {
+      setLoadingGallery(true);
+      getBackgrounds()
+        .then(setGallery)
+        .catch(() => toast.error('No se pudo cargar la galería'))
+        .finally(() => setLoadingGallery(false));
+    }
+  }, [showBgPanel]);
+
+  const applyGalleryBackground = async (bg: Background) => {
+    setApplyingBg(bg.id);
+    try {
+      const full = await getBackground(bg.id);
+      if (full.image) designer.setBackground(full.image);
+      setShowBgPanel(false);
+    } catch {
+      toast.error('No se pudo aplicar el fondo');
+    } finally {
+      setApplyingBg(null);
+    }
+  };
 
   const handleAddQR = async () => {
     if (!qrUrl.trim()) return;
@@ -54,16 +84,25 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
     }
   };
 
-  const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataURL = ev.target?.result as string;
+    e.target.value = ''; // allow re-selecting the same file later
+    try {
+      const dataURL = await fileToDataURL(file);
       designer.setBackground(dataURL);
       setShowBgPanel(false);
-    };
-    reader.readAsDataURL(file);
+
+      if (saveToGallery) {
+        const thumbnail = await makeThumbnail(dataURL);
+        const name = file.name.replace(/\.[^.]+$/, '') || 'Fondo';
+        const created = await createBackground({ name, image: dataURL, thumbnail });
+        setGallery((prev) => [created, ...prev]);
+        toast.success('Fondo añadido a la galería');
+      }
+    } catch {
+      toast.error('Error al subir el fondo');
+    }
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -212,6 +251,37 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
               </button>
             </div>
 
+            {/* Gallery */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 text-[10px] text-gray-500 font-medium">
+                <Images size={10} /> Galería de fondos
+              </div>
+              {loadingGallery ? (
+                <div className="flex justify-center py-3 text-gray-400"><Spinner size={14} /></div>
+              ) : gallery.length === 0 ? (
+                <p className="text-[10px] text-gray-400 py-1">Aún no hay fondos guardados.</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-1.5 max-h-44 overflow-y-auto pr-0.5">
+                  {gallery.map((bg) => (
+                    <button
+                      key={bg.id}
+                      onClick={() => applyGalleryBackground(bg)}
+                      disabled={applyingBg !== null}
+                      title={bg.name}
+                      className="relative aspect-[3/4] rounded-md overflow-hidden border border-gray-200 hover:border-gold-400 transition-colors disabled:opacity-50"
+                    >
+                      <img src={bg.thumbnail} alt={bg.name} className="w-full h-full object-cover" />
+                      {applyingBg === bg.id && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-white/60">
+                          <Spinner size={12} />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Upload */}
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -219,6 +289,15 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
             >
               <ImageIcon size={11} /> Subir imagen
             </button>
+            <label className="flex items-center gap-1.5 text-[10px] text-gray-500 pl-1 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={saveToGallery}
+                onChange={(e) => setSaveToGallery(e.target.checked)}
+                className="accent-gold-500"
+              />
+              Guardar en la galería para reutilizar
+            </label>
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleBgUpload} />
 
             {/* AI */}

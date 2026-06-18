@@ -1,22 +1,60 @@
-import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, FolderPlus, X, Check } from 'lucide-react';
-import { getCategories, createCategory, updateCategory, deleteCategory, getFolders, createFolder, updateFolder, deleteFolder } from '@/lib/api';
-import type { Category, Folder } from '@/types';
+import { useEffect, useRef, useState } from 'react';
+import { Plus, Pencil, Trash2, FolderPlus, X, Check, ImageIcon } from 'lucide-react';
+import {
+  getCategories, createCategory, updateCategory, deleteCategory,
+  getFolders, createFolder, updateFolder, deleteFolder,
+  getBackgrounds, createBackground, deleteBackground,
+} from '@/lib/api';
+import { makeThumbnail, fileToDataURL } from '@/lib/image';
+import type { Category, Folder, Background } from '@/types';
+import Spinner from '@/components/ui/Spinner';
 import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [backgrounds, setBackgrounds] = useState<Background[]>([]);
   const [editingCat, setEditingCat] = useState<Partial<Category> | null>(null);
   const [editingFolder, setEditingFolder] = useState<Partial<Folder> | null>(null);
+  const [uploadingBg, setUploadingBg] = useState(false);
+  const bgInputRef = useRef<HTMLInputElement>(null);
 
   const loadAll = async () => {
-    const [cats, fols] = await Promise.all([getCategories(), getFolders()]);
+    const [cats, fols, bgs] = await Promise.all([getCategories(), getFolders(), getBackgrounds()]);
     setCategories(cats);
     setFolders(fols);
+    setBackgrounds(bgs);
   };
 
   useEffect(() => { loadAll(); }, []);
+
+  const handleBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    e.target.value = '';
+    setUploadingBg(true);
+    try {
+      for (const file of files) {
+        const dataURL = await fileToDataURL(file);
+        const thumbnail = await makeThumbnail(dataURL);
+        const name = file.name.replace(/\.[^.]+$/, '') || 'Fondo';
+        const created = await createBackground({ name, image: dataURL, thumbnail });
+        setBackgrounds((prev) => [created, ...prev]);
+      }
+      toast.success(files.length > 1 ? 'Fondos añadidos' : 'Fondo añadido');
+    } catch {
+      toast.error('Error al subir el fondo');
+    } finally {
+      setUploadingBg(false);
+    }
+  };
+
+  const deleteBg = async (id: string, name: string) => {
+    if (!confirm(`¿Eliminar el fondo "${name}"?`)) return;
+    await deleteBackground(id);
+    toast.success('Fondo eliminado');
+    setBackgrounds((prev) => prev.filter((b) => b.id !== id));
+  };
 
   const saveCat = async () => {
     if (!editingCat?.name?.trim()) return;
@@ -70,7 +108,7 @@ export default function SettingsPage() {
     <div className="p-8 max-w-2xl mx-auto">
       <div className="mb-8">
         <h1 className="page-title">Configuración</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Gestiona categorías y carpetas.</p>
+        <p className="text-sm text-gray-500 mt-0.5">Gestiona categorías, carpetas y fondos.</p>
       </div>
 
       {/* Categories */}
@@ -147,7 +185,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Folders */}
-      <section className="card p-6">
+      <section className="card p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="section-title text-base">Carpetas de noras</h2>
           <button
@@ -206,6 +244,54 @@ export default function SettingsPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Backgrounds */}
+      <section className="card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="section-title text-base">Biblioteca de fondos</h2>
+          <button
+            onClick={() => bgInputRef.current?.click()}
+            disabled={uploadingBg}
+            className="btn-secondary text-xs py-1.5 disabled:opacity-50"
+          >
+            {uploadingBg ? <Spinner size={12} /> : <ImageIcon size={12} />} Subir
+          </button>
+          <input
+            ref={bgInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleBgUpload}
+          />
+        </div>
+
+        {backgrounds.length === 0 ? (
+          <p className="text-sm text-gray-400 py-2">
+            Aún no hay fondos. Sube imágenes para reutilizarlas en tus diseños.
+          </p>
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+            {backgrounds.map((bg) => (
+              <div key={bg.id} className="group relative aspect-[3/4] rounded-lg overflow-hidden border border-gray-200">
+                <img src={bg.thumbnail} alt={bg.name} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-start justify-end p-1.5">
+                  <button
+                    onClick={() => deleteBg(bg.id, bg.name)}
+                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-white/90 text-gray-500 hover:text-red-500 transition-all"
+                    title="Eliminar"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
+                  <p className="text-[10px] text-white truncate">{bg.name}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

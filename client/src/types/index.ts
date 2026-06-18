@@ -39,6 +39,15 @@ export interface Instance {
   updatedAt: string;
 }
 
+export interface Background {
+  id: string;
+  name: string;
+  thumbnail: string;
+  image?: string; // only present when fetched individually
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type DesignerMode = 'template' | 'instance';
 
 export interface DesignerState {

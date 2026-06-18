@@ -27,14 +27,21 @@ if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('file:./')) 
   console.log('[NorTaxiGo] DATABASE_URL resolved to:', process.env.DATABASE_URL);
 }
 
-// Run prisma db push using npx (finds prisma from any node_modules in the tree)
+// Run prisma db push using the local binary (npx is unreliable on Hostinger)
 console.log('[NorTaxiGo] Running prisma db push...');
+const prismaBin = path.join(__dirname, 'node_modules', '.bin', 'prisma');
+const schemaPath = path.join(__dirname, 'prisma', 'schema.prisma');
+const schemaArg = fs.existsSync(schemaPath) ? ` --schema="${schemaPath}"` : '';
+const prismaCmd = (fs.existsSync(prismaBin)
+  ? `"${prismaBin}" db push --skip-generate`
+  : 'npx prisma db push --skip-generate') + schemaArg;
+console.log('[NorTaxiGo] Using prisma cmd:', prismaCmd);
 try {
-  execSync('npx prisma db push --skip-generate', {
+  execSync(prismaCmd, {
     cwd: __dirname,
     stdio: 'inherit',
     env: process.env,
-    timeout: 60000,
+    timeout: 90000,
   });
   console.log('[NorTaxiGo] Database ready.');
 } catch (e) {

@@ -114,9 +114,9 @@ function InstanceCard({ instance, onClick }: { instance: Instance; onClick: () =
   return (
     <div className="card-hover" onClick={onClick}>
       {/* Thumbnail */}
-      <div className="aspect-[3/4] bg-cream-100 rounded-t-xl overflow-hidden">
+      <div className="aspect-[3/4] bg-white p-2 rounded-t-xl overflow-hidden">
         {instance.thumbnail ? (
-          <img src={instance.thumbnail} alt={instance.name} className="w-full h-full object-cover" />
+          <img src={instance.thumbnail} alt={instance.name} className="w-full h-full object-contain" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-3xl text-gray-300">
             🚕

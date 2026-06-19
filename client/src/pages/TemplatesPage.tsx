@@ -207,14 +207,14 @@ function TemplateCard({
     <div className="card group">
       {/* Thumbnail */}
       <div
-        className="aspect-[3/4] bg-cream-100 rounded-t-xl overflow-hidden cursor-pointer border-b border-gray-200"
+        className="aspect-[3/4] bg-white p-2 rounded-t-xl overflow-hidden cursor-pointer border-b border-gray-200"
         onClick={onEdit}
       >
         {template.thumbnail ? (
           <img
             src={template.thumbnail}
             alt={template.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 gap-2">

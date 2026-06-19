@@ -106,9 +106,9 @@ export default function NewInstancePage() {
               className="card-hover"
               onClick={() => navigate(`/diseñador?mode=instance&templateId=${template.id}`)}
             >
-              <div className="aspect-[3/4] bg-cream-100 rounded-t-xl overflow-hidden border-b border-gray-200">
+              <div className="aspect-[3/4] bg-white p-2 rounded-t-xl overflow-hidden border-b border-gray-200">
                 {template.thumbnail ? (
-                  <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover" />
+                  <img src={template.thumbnail} alt={template.name} className="w-full h-full object-contain" />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 gap-2">
                     <span className="text-3xl">{template.category.icon}</span>

@@ -1,40 +1,70 @@
+import { useEffect, useRef, useState } from 'react';
+import { QrCode, ImageIcon, List } from 'lucide-react';
 import type { SelectedObjectProps } from './useDesigner';
 import TextStyleControls from './TextStyleControls';
+import { fileToDataURL } from '@/lib/image';
+import Modal from '@/components/ui/Modal';
 
 interface Props {
   selected: SelectedObjectProps;
   onChange: (props: Partial<SelectedObjectProps>) => void;
   usedColors?: string[];
+  onRegenerateQR?: (url: string) => void;
+  onReplaceImage?: (dataURL: string, mode: 'fit' | 'real') => void;
 }
 
-export default function PropertiesPanel({ selected, onChange, usedColors = [] }: Props) {
+export default function PropertiesPanel({
+  selected, onChange, usedColors = [], onRegenerateQR, onReplaceImage,
+}: Props) {
   const isText = selected.type === 'textbox' || selected.type === 'i-text';
+
+  const [qrUrl, setQrUrl] = useState('');
+  const [pendingImg, setPendingImg] = useState<string | null>(null);
+  const imgInputRef = useRef<HTMLInputElement>(null);
+
+  // Keep the QR URL field in sync with the selected QR
+  useEffect(() => { setQrUrl(selected.qrUrl ?? ''); }, [selected.qrUrl]);
+
+  const handlePickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const dataURL = await fileToDataURL(file);
+    setPendingImg(dataURL); // open the fit/real modal
+  };
+
+  // Toggle a bullet list on the text's non-empty lines
+  const toggleBulletList = () => {
+    const lines = (selected.text ?? '').split('\n');
+    const nonEmpty = lines.filter((l) => l.trim());
+    const allBulleted = nonEmpty.length > 0 && nonEmpty.every((l) => l.trimStart().startsWith('•'));
+    const next = lines
+      .map((l) => {
+        if (!l.trim()) return l;
+        if (allBulleted) return l.replace(/^(\s*)•\s?/, '$1');
+        return l.trimStart().startsWith('•') ? l : `•  ${l}`;
+      })
+      .join('\n');
+    onChange({ text: next });
+  };
 
   return (
     <div className="p-3 space-y-4">
       <p className="label text-[10px] uppercase tracking-wide">Propiedades</p>
 
-      {/* Position & size */}
+      {/* Position */}
       <div>
         <p className="label text-[10px]">Posición</p>
         <div className="grid grid-cols-2 gap-1.5">
           <div>
             <label className="label text-[9px]">X</label>
-            <input
-              type="number"
-              className="input text-xs py-1"
-              value={selected.left}
-              onChange={(e) => onChange({ left: Number(e.target.value) })}
-            />
+            <input type="number" className="input text-xs py-1" value={selected.left}
+              onChange={(e) => onChange({ left: Number(e.target.value) })} />
           </div>
           <div>
             <label className="label text-[9px]">Y</label>
-            <input
-              type="number"
-              className="input text-xs py-1"
-              value={selected.top}
-              onChange={(e) => onChange({ top: Number(e.target.value) })}
-            />
+            <input type="number" className="input text-xs py-1" value={selected.top}
+              onChange={(e) => onChange({ top: Number(e.target.value) })} />
           </div>
         </div>
       </div>
@@ -43,43 +73,73 @@ export default function PropertiesPanel({ selected, onChange, usedColors = [] }:
       <div>
         <div className="flex items-center justify-between">
           <label className="label text-[10px]">Rotación ({Math.round(selected.angle)}°)</label>
-          <button
-            onClick={() => onChange({ angle: 0 })}
+          <button onClick={() => onChange({ angle: 0 })}
             className="text-[10px] text-gold-600 hover:text-gold-700 font-medium"
-            title="Poner horizontal (0°)"
-          >
-            Enderezar
-          </button>
+            title="Poner horizontal (0°)">Enderezar</button>
         </div>
-        <input
-          type="range"
-          min={-180}
-          max={180}
-          value={selected.angle}
+        <input type="range" min={-180} max={180} value={selected.angle}
           onChange={(e) => onChange({ angle: Number(e.target.value) })}
-          className="w-full accent-gold-500"
-        />
+          className="w-full accent-gold-500" />
       </div>
 
       {/* Opacity */}
       <div>
         <label className="label text-[10px]">Opacidad ({Math.round(selected.opacity * 100)}%)</label>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={selected.opacity}
+        <input type="range" min={0} max={1} step={0.05} value={selected.opacity}
           onChange={(e) => onChange({ opacity: Number(e.target.value) })}
-          className="w-full accent-gold-500"
-        />
+          className="w-full accent-gold-500" />
       </div>
+
+      {/* QR regeneration */}
+      {selected.isQR && onRegenerateQR && (
+        <div>
+          <label className="label text-[10px] flex items-center gap-1"><QrCode size={11} /> Contenido del QR</label>
+          <textarea
+            className="input text-xs py-1.5 resize-none"
+            rows={2}
+            placeholder="URL o texto del QR..."
+            value={qrUrl}
+            onChange={(e) => setQrUrl(e.target.value)}
+          />
+          <button
+            onClick={() => qrUrl.trim() && onRegenerateQR(qrUrl.trim())}
+            disabled={!qrUrl.trim() || qrUrl.trim() === (selected.qrUrl ?? '')}
+            className="btn-primary w-full justify-center text-xs py-1.5 mt-1.5 disabled:opacity-50"
+          >
+            Regenerar QR
+          </button>
+          <p className="text-[10px] text-gray-400 mt-1">Se regenera en el mismo sitio y tamaño.</p>
+        </div>
+      )}
+
+      {/* Image replacement — holders and any plain image (not QRs) */}
+      {(selected.isImageHolder || (selected.type === 'image' && !selected.isQR)) && onReplaceImage && (
+        <div>
+          <label className="label text-[10px] flex items-center gap-1"><ImageIcon size={11} /> Imagen</label>
+          <button
+            onClick={() => imgInputRef.current?.click()}
+            className="btn-secondary w-full justify-center text-xs py-1.5"
+          >
+            Reemplazar imagen
+          </button>
+          <input ref={imgInputRef} type="file" accept="image/*" className="hidden" onChange={handlePickImage} />
+        </div>
+      )}
 
       {/* Text-specific */}
       {isText && (
         <>
           <div>
-            <label className="label text-[10px]">Texto</label>
+            <div className="flex items-center justify-between">
+              <label className="label text-[10px]">Texto</label>
+              <button
+                onClick={toggleBulletList}
+                title="Lista con viñetas"
+                className="flex items-center gap-1 text-[10px] text-gold-600 hover:text-gold-700 font-medium"
+              >
+                <List size={12} /> Lista
+              </button>
+            </div>
             <textarea
               className="input text-xs py-1.5 resize-none"
               rows={3}
@@ -87,10 +147,30 @@ export default function PropertiesPanel({ selected, onChange, usedColors = [] }:
               onChange={(e) => onChange({ text: e.target.value })}
             />
           </div>
-
           <TextStyleControls values={selected} onChange={onChange} usedColors={usedColors} />
         </>
       )}
+
+      {/* Fit / real-size modal after picking a replacement image */}
+      <Modal open={pendingImg !== null} onClose={() => setPendingImg(null)} title="¿Cómo colocar la imagen?" size="sm">
+        <div className="p-5 space-y-3">
+          <p className="text-sm text-gray-600">El tamaño de la imagen no coincide con el hueco. ¿Qué prefieres?</p>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => { if (pendingImg) onReplaceImage?.(pendingImg, 'fit'); setPendingImg(null); }}
+              className="btn-primary justify-center text-xs py-2"
+            >
+              Ajustar al hueco
+            </button>
+            <button
+              onClick={() => { if (pendingImg) onReplaceImage?.(pendingImg, 'real'); setPendingImg(null); }}
+              className="btn-secondary justify-center text-xs py-2"
+            >
+              Tamaño real
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

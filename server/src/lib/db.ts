@@ -56,6 +56,15 @@ db.exec(`
     "updatedAt" TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS "Asset" (
+    "id"        TEXT NOT NULL PRIMARY KEY,
+    "name"      TEXT NOT NULL,
+    "image"     TEXT NOT NULL,
+    "thumbnail" TEXT NOT NULL,
+    "createdAt" TEXT NOT NULL,
+    "updatedAt" TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS "Folder" (
     "id"        TEXT NOT NULL PRIMARY KEY,
     "name"      TEXT NOT NULL,

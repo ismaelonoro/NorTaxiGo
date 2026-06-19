@@ -1,13 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  Type, QrCode, ImageIcon, Palette, Wand2, Trash2,
+  Type, QrCode, ImageIcon, Palette, Wand2, Trash2, Frame,
   ArrowUp, ArrowDown, ZoomIn, ZoomOut, Save, Download, ChevronDown,
   Undo2, Redo2, Images,
 } from 'lucide-react';
 import type { useDesigner } from './useDesigner';
-import { generateBackground, getBackgrounds, getBackground, createBackground } from '@/lib/api';
+import {
+  generateBackground, getBackgrounds, getBackground, createBackground,
+  getAssets, getAsset, createAsset,
+} from '@/lib/api';
 import { makeThumbnail, fileToDataURL } from '@/lib/image';
-import type { Background } from '@/types';
+import type { Background, Asset } from '@/types';
 import Spinner from '@/components/ui/Spinner';
 import toast from 'react-hot-toast';
 
@@ -35,6 +38,12 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
   const [loadingGallery, setLoadingGallery] = useState(false);
   const [applyingBg, setApplyingBg] = useState<string | null>(null);
   const [saveToGallery, setSaveToGallery] = useState(true);
+  // Image library
+  const [showImgPanel, setShowImgPanel] = useState(false);
+  const [imgGallery, setImgGallery] = useState<Asset[]>([]);
+  const [loadingImgGallery, setLoadingImgGallery] = useState(false);
+  const [insertingAsset, setInsertingAsset] = useState<string | null>(null);
+  const [saveImgToGallery, setSaveImgToGallery] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
@@ -108,15 +117,46 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
     }
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Load the image library the first time the Images panel is opened
+  useEffect(() => {
+    if (showImgPanel && imgGallery.length === 0) {
+      setLoadingImgGallery(true);
+      getAssets()
+        .then(setImgGallery)
+        .catch(() => toast.error('No se pudo cargar la galería de imágenes'))
+        .finally(() => setLoadingImgGallery(false));
+    }
+  }, [showImgPanel]);
+
+  const insertAssetImage = async (asset: Asset) => {
+    setInsertingAsset(asset.id);
+    try {
+      const full = await getAsset(asset.id);
+      if (full.image) designer.addImageFromURL(full.image, { left: 240, top: 300 });
+    } catch {
+      toast.error('No se pudo insertar la imagen');
+    } finally {
+      setInsertingAsset(null);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataURL = ev.target?.result as string;
-      designer.addImageFromURL(dataURL, { left: 297, top: 80, scaleX: 0.3, scaleY: 0.3 });
-    };
-    reader.readAsDataURL(file);
+    e.target.value = '';
+    try {
+      const dataURL = await fileToDataURL(file);
+      designer.addImageFromURL(dataURL, { left: 240, top: 300 });
+      if (saveImgToGallery) {
+        const thumbnail = await makeThumbnail(dataURL);
+        const name = file.name.replace(/\.[^.]+$/, '') || 'Imagen';
+        const created = await createAsset({ name, image: dataURL, thumbnail });
+        setImgGallery((prev) => [created, ...prev]);
+        toast.success('Imagen añadida a la galería');
+      }
+    } catch {
+      toast.error('Error al subir la imagen');
+    }
   };
 
   const zoomIdx = ZOOM_LEVELS.indexOf(designer.zoom);
@@ -218,12 +258,70 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
         )}
 
         <button
-          onClick={() => logoInputRef.current?.click()}
-          className="btn-ghost w-full justify-start text-xs py-1.5"
+          onClick={() => setShowImgPanel(!showImgPanel)}
+          className="btn-ghost w-full justify-between text-xs py-1.5"
         >
-          <ImageIcon size={13} /> Imagen / Logo
+          <span className="flex items-center gap-1.5"><ImageIcon size={13} /> Imágenes</span>
+          <ChevronDown size={12} className={`transition-transform ${showImgPanel ? 'rotate-180' : ''}`} />
         </button>
-        <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+
+        {showImgPanel && (
+          <div className="space-y-2 pl-1">
+            <div className="flex items-center gap-1 text-[10px] text-gray-500 font-medium">
+              <Images size={10} /> Galería de imágenes
+            </div>
+            {loadingImgGallery ? (
+              <div className="flex justify-center py-3 text-gray-400"><Spinner size={14} /></div>
+            ) : imgGallery.length === 0 ? (
+              <p className="text-[10px] text-gray-400 py-1">Aún no hay imágenes guardadas.</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-1.5 max-h-44 overflow-y-auto pr-0.5">
+                {imgGallery.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => insertAssetImage(a)}
+                    disabled={insertingAsset !== null}
+                    title={a.name}
+                    className="relative aspect-[3/4] rounded-md overflow-hidden border border-gray-200 hover:border-gold-400 transition-colors disabled:opacity-50"
+                  >
+                    <img src={a.thumbnail} alt={a.name} className="w-full h-full object-cover" />
+                    {insertingAsset === a.id && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-white/60">
+                        <Spinner size={12} />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => logoInputRef.current?.click()}
+                className="btn-ghost flex-1 justify-center text-xs py-1"
+              >
+                <ImageIcon size={11} /> Subir
+              </button>
+              <button
+                onClick={() => designer.addImagePlaceholder()}
+                title="Añadir un hueco para colocar una imagen después"
+                className="btn-ghost flex-1 justify-center text-xs py-1"
+              >
+                <Frame size={11} /> Hueco
+              </button>
+            </div>
+            <label className="flex items-center gap-1.5 text-[10px] text-gray-500 pl-1 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={saveImgToGallery}
+                onChange={(e) => setSaveImgToGallery(e.target.checked)}
+                className="accent-gold-500"
+              />
+              Guardar en la galería para reutilizar
+            </label>
+            <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+          </div>
+        )}
       </div>
 
       {/* Background */}

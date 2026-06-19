@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Category, Template, Folder, Instance, Background } from '@/types';
+import type { Category, Template, Folder, Instance, Background, Asset } from '@/types';
 
 const api = axios.create({ baseURL: '/api', withCredentials: true });
 
@@ -52,6 +52,14 @@ export const getBackground = (id: string) =>
 export const createBackground = (data: { name: string; image: string; thumbnail: string }) =>
   api.post<Background>('/backgrounds', data).then((r) => r.data);
 export const deleteBackground = (id: string) => api.delete(`/backgrounds/${id}`);
+
+// Assets (reusable image library)
+export const getAssets = () => api.get<Asset[]>('/assets').then((r) => r.data);
+export const getAsset = (id: string) =>
+  api.get<Asset>(`/assets/${id}`).then((r) => r.data);
+export const createAsset = (data: { name: string; image: string; thumbnail: string }) =>
+  api.post<Asset>('/assets', data).then((r) => r.data);
+export const deleteAsset = (id: string) => api.delete(`/assets/${id}`);
 
 // AI
 export const generateBackground = (prompt: string, style?: string) =>

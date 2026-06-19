@@ -4,9 +4,10 @@ import {
   getCategories, createCategory, updateCategory, deleteCategory,
   getFolders, createFolder, updateFolder, deleteFolder,
   getBackgrounds, createBackground, deleteBackground,
+  getAssets, createAsset, deleteAsset,
 } from '@/lib/api';
 import { makeThumbnail, fileToDataURL } from '@/lib/image';
-import type { Category, Folder, Background } from '@/types';
+import type { Category, Folder, Background, Asset } from '@/types';
 import Spinner from '@/components/ui/Spinner';
 import toast from 'react-hot-toast';
 
@@ -14,16 +15,22 @@ export default function SettingsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [backgrounds, setBackgrounds] = useState<Background[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [editingCat, setEditingCat] = useState<Partial<Category> | null>(null);
   const [editingFolder, setEditingFolder] = useState<Partial<Folder> | null>(null);
   const [uploadingBg, setUploadingBg] = useState(false);
+  const [uploadingAsset, setUploadingAsset] = useState(false);
   const bgInputRef = useRef<HTMLInputElement>(null);
+  const assetInputRef = useRef<HTMLInputElement>(null);
 
   const loadAll = async () => {
-    const [cats, fols, bgs] = await Promise.all([getCategories(), getFolders(), getBackgrounds()]);
+    const [cats, fols, bgs, ats] = await Promise.all([
+      getCategories(), getFolders(), getBackgrounds(), getAssets(),
+    ]);
     setCategories(cats);
     setFolders(fols);
     setBackgrounds(bgs);
+    setAssets(ats);
   };
 
   useEffect(() => { loadAll(); }, []);
@@ -54,6 +61,34 @@ export default function SettingsPage() {
     await deleteBackground(id);
     toast.success('Fondo eliminado');
     setBackgrounds((prev) => prev.filter((b) => b.id !== id));
+  };
+
+  const handleAssetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    e.target.value = '';
+    setUploadingAsset(true);
+    try {
+      for (const file of files) {
+        const dataURL = await fileToDataURL(file);
+        const thumbnail = await makeThumbnail(dataURL);
+        const name = file.name.replace(/\.[^.]+$/, '') || 'Imagen';
+        const created = await createAsset({ name, image: dataURL, thumbnail });
+        setAssets((prev) => [created, ...prev]);
+      }
+      toast.success(files.length > 1 ? 'Imágenes añadidas' : 'Imagen añadida');
+    } catch {
+      toast.error('Error al subir la imagen');
+    } finally {
+      setUploadingAsset(false);
+    }
+  };
+
+  const deleteAssetItem = async (id: string, name: string) => {
+    if (!confirm(`¿Eliminar la imagen "${name}"?`)) return;
+    await deleteAsset(id);
+    toast.success('Imagen eliminada');
+    setAssets((prev) => prev.filter((a) => a.id !== id));
   };
 
   const saveCat = async () => {
@@ -108,7 +143,7 @@ export default function SettingsPage() {
     <div className="p-4 sm:p-8 max-w-2xl mx-auto">
       <div className="mb-8">
         <h1 className="page-title">Configuración</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Gestiona categorías, carpetas y fondos.</p>
+        <p className="text-sm text-gray-500 mt-0.5">Gestiona categorías, carpetas, fondos e imágenes.</p>
       </div>
 
       {/* Categories */}
@@ -247,7 +282,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Backgrounds */}
-      <section className="card p-6">
+      <section className="card p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="section-title text-base">Biblioteca de fondos</h2>
           <button
@@ -287,6 +322,54 @@ export default function SettingsPage() {
                 </div>
                 <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
                   <p className="text-[10px] text-white truncate">{bg.name}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Image library */}
+      <section className="card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="section-title text-base">Biblioteca de imágenes</h2>
+          <button
+            onClick={() => assetInputRef.current?.click()}
+            disabled={uploadingAsset}
+            className="btn-secondary text-xs py-1.5 disabled:opacity-50"
+          >
+            {uploadingAsset ? <Spinner size={12} /> : <ImageIcon size={12} />} Subir
+          </button>
+          <input
+            ref={assetInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleAssetUpload}
+          />
+        </div>
+
+        {assets.length === 0 ? (
+          <p className="text-sm text-gray-400 py-2">
+            Aún no hay imágenes. Sube imágenes (logos, decoraciones…) para reutilizarlas en tus diseños.
+          </p>
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+            {assets.map((a) => (
+              <div key={a.id} className="group relative aspect-[3/4] rounded-lg overflow-hidden border border-gray-200">
+                <img src={a.thumbnail} alt={a.name} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-start justify-end p-1.5">
+                  <button
+                    onClick={() => deleteAssetItem(a.id, a.name)}
+                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-white/90 text-gray-500 hover:text-red-500 transition-all"
+                    title="Eliminar"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
+                  <p className="text-[10px] text-white truncate">{a.name}</p>
                 </div>
               </div>
             ))}

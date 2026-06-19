@@ -48,6 +48,16 @@ export interface Background {
   updatedAt: string;
 }
 
+// Reusable image library entry (same shape as Background)
+export interface Asset {
+  id: string;
+  name: string;
+  thumbnail: string;
+  image?: string; // only present when fetched individually
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type DesignerMode = 'template' | 'instance';
 
 export interface DesignerState {

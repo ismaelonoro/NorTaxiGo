@@ -6,6 +6,10 @@ import { WEB_FONTS } from '@/lib/fonts';
 export const CANVAS_WIDTH = 794;
 export const CANVAS_HEIGHT = 1123;
 
+// Custom object props that must survive toJSON/loadFromJSON (QR + image holders)
+const EXTRA_PROPS = ['isQR', 'qrUrl', 'isImageHolder', 'holderW', 'holderH'];
+const serialize = (canvas: fabric.Canvas) => JSON.stringify(canvas.toObject(EXTRA_PROPS));
+
 export type SelectedObjectProps = {
   type: string;
   left: number;
@@ -21,6 +25,9 @@ export type SelectedObjectProps = {
   textAlign?: string;
   text?: string;
   opacity: number;
+  isQR?: boolean;
+  qrUrl?: string;
+  isImageHolder?: boolean;
 };
 
 const MAX_HISTORY = 50;
@@ -51,6 +58,7 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
   const [historyIndex, setHistoryIndex] = useState(-1);
 
   const getProps = useCallback((obj: fabric.Object): SelectedObjectProps => {
+    const o = obj as fabric.Object & { isQR?: boolean; qrUrl?: string; isImageHolder?: boolean };
     const base = {
       type: obj.type ?? 'object',
       left: Math.round(obj.left ?? 0),
@@ -59,6 +67,9 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
       height: Math.round((obj.height ?? 0) * (obj.scaleY ?? 1)),
       angle: Math.round(obj.angle ?? 0),
       opacity: obj.opacity ?? 1,
+      isQR: o.isQR,
+      qrUrl: o.qrUrl,
+      isImageHolder: o.isImageHolder,
     };
     if (obj.type === 'textbox' || obj.type === 'i-text') {
       const t = obj as fabric.Textbox;
@@ -93,7 +104,7 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
       if (isRestoringRef.current) return;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
-        const json = JSON.stringify(canvas.toJSON());
+        const json = serialize(canvas);
         const history = historyRef.current;
         const idx = historyIndexRef.current;
         // Drop any redo states ahead of current position
@@ -377,11 +388,27 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     const dataURL = await generateQRDataURL(url, 400, darkColor, lightColor);
     fabric.Image.fromURL(dataURL).then((img) => {
       img.set({ left: 280, top: 400, scaleX: 0.5, scaleY: 0.5 });
+      // Tag as QR + remember its URL so it can be regenerated later
+      Object.assign(img, { isQR: true, qrUrl: url });
       canvas.add(img);
       canvas.setActiveObject(img);
       canvas.renderAll();
     });
   }, []);
+
+  // Regenerate the selected QR with a new URL, keeping its position/size/angle
+  const regenerateQR = useCallback(async (url: string) => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getActiveObject() as (fabric.Image & { isQR?: boolean; qrUrl?: string }) | undefined;
+    if (!canvas || !obj || !obj.isQR) return;
+    const dataURL = await generateQRDataURL(url, 400);
+    await obj.setSrc(dataURL);
+    obj.qrUrl = url;
+    obj.setCoords();
+    canvas.renderAll();
+    setSelected(getProps(obj));
+    canvas.fire('object:modified');
+  }, [getProps]);
 
   const addImageFromURL = useCallback((dataURL: string, opts?: Partial<fabric.Image>) => {
     const canvas = fabricRef.current;
@@ -390,6 +417,68 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
       img.set({ left: 0, top: 0, selectable: true, ...opts });
       canvas.add(img);
       canvas.renderAll();
+    });
+  }, []);
+
+  // Add an empty image placeholder (a styled, dashed box) that can be selected
+  // and filled with an image later. Tagged isImageHolder + holderW/holderH.
+  const addImagePlaceholder = useCallback((w = 320, h = 320) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const left = (CANVAS_WIDTH - w) / 2;
+    const top = (CANVAS_HEIGHT - h) / 2;
+    const rect = new fabric.Rect({
+      width: w, height: h, fill: '#f1f3f5', stroke: '#c4973a',
+      strokeDashArray: [8, 6], strokeWidth: 2, rx: 10, ry: 10,
+      originX: 'left', originY: 'top',
+    });
+    const label = new fabric.Textbox('🖼️  Imagen', {
+      width: w, fontSize: 22, fill: '#9aa0a6', fontFamily: 'Inter',
+      textAlign: 'center', originX: 'center', originY: 'center',
+      left: w / 2, top: h / 2,
+    });
+    const group = new fabric.Group([rect, label], { left, top });
+    Object.assign(group, { isImageHolder: true, holderW: w, holderH: h });
+    canvas.add(group);
+    canvas.setActiveObject(group);
+    canvas.renderAll();
+  }, []);
+
+  // Replace the selected image holder (empty placeholder or already-filled
+  // image) with a new image. mode 'fit' scales it to fit the holder frame
+  // (keeping aspect, centered); 'real' places it at its natural size.
+  const replaceHolderImage = useCallback((dataURL: string, mode: 'fit' | 'real') => {
+    const canvas = fabricRef.current;
+    const holder = canvas?.getActiveObject() as
+      (fabric.Object & { isImageHolder?: boolean; isQR?: boolean; holderW?: number; holderH?: number }) | undefined;
+    // Allow replacing image placeholders AND any plain image (but not QRs)
+    const canReplace = !!holder && (holder.isImageHolder || (holder.type === 'image' && !holder.isQR));
+    if (!canvas || !holder || !canReplace) return;
+    const frameW = holder.holderW ?? holder.getScaledWidth();
+    const frameH = holder.holderH ?? holder.getScaledHeight();
+    const frameLeft = holder.left ?? 0;
+    const frameTop = holder.top ?? 0;
+
+    fabric.Image.fromURL(dataURL).then((img) => {
+      const iw = img.width ?? 1;
+      const ih = img.height ?? 1;
+      if (mode === 'fit') {
+        const scale = Math.min(frameW / iw, frameH / ih);
+        img.set({
+          scaleX: scale, scaleY: scale,
+          left: frameLeft + (frameW - iw * scale) / 2,
+          top: frameTop + (frameH - ih * scale) / 2,
+        });
+      } else {
+        img.set({ scaleX: 1, scaleY: 1, left: frameLeft, top: frameTop });
+      }
+      // Keep it a replaceable holder; remember the frame for future fits
+      Object.assign(img, { isImageHolder: true, holderW: frameW, holderH: frameH });
+      canvas.remove(holder);
+      canvas.add(img);
+      canvas.setActiveObject(img);
+      canvas.renderAll();
+      canvas.fire('object:modified');
     });
   }, []);
 
@@ -564,7 +653,10 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     canvas.renderAll();
   }, []);
 
-  const toJSON = useCallback(() => JSON.stringify(fabricRef.current?.toJSON() ?? {}), []);
+  const toJSON = useCallback(() => {
+    const c = fabricRef.current;
+    return c ? serialize(c) : '{}';
+  }, []);
 
   const toDataURL = useCallback(() => {
     // JPEG at multiplier 3 (≈ 285 dpi): embeds directly into the PDF (no slow
@@ -591,7 +683,7 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
       if (document.fonts?.ready) {
         document.fonts.ready.then(() => canvas.renderAll()).catch(() => {});
       }
-      const snapshot = JSON.stringify(canvas.toJSON());
+      const snapshot = serialize(canvas);
       historyRef.current = [snapshot];
       historyIndexRef.current = 0;
       setHistoryIndex(0);
@@ -651,7 +743,10 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     canRedo,
     addText,
     addQR,
+    regenerateQR,
     addImageFromURL,
+    addImagePlaceholder,
+    replaceHolderImage,
     setBackground,
     setBackgroundColor,
     setBackgroundOpacity,

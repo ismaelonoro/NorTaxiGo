@@ -17,15 +17,28 @@ export type SelectedObjectProps = {
   fill?: string;
   fontWeight?: string;
   fontStyle?: string;
+  textAlign?: string;
   text?: string;
   opacity: number;
 };
 
 const MAX_HISTORY = 50;
 
+// Make a textbox behave like a real text box: only the side handles (ml/mr)
+// remain, which change the box WIDTH and re-wrap the text. Corner and
+// top/bottom handles are hidden so the glyphs can never be stretched/deformed;
+// font size is changed via the panel control instead.
+function configureTextbox(t: fabric.Textbox) {
+  t.setControlsVisibility({
+    mt: false, mb: false, tl: false, tr: false, bl: false, br: false,
+  });
+}
+
 export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
   const fabricRef = useRef<fabric.Canvas | null>(null);
   const [selected, setSelected] = useState<SelectedObjectProps | null>(null);
+  const [selectionCount, setSelectionCount] = useState(0);
+  const [multiTextSelected, setMultiTextSelected] = useState(false);
   const [zoom, setZoom] = useState(0.65);
   const [ready, setReady] = useState(false);
 
@@ -55,6 +68,7 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
         fill: t.fill as string,
         fontWeight: t.fontWeight as string,
         fontStyle: t.fontStyle as string,
+        textAlign: t.textAlign as string,
         text: t.text,
       };
     }
@@ -97,13 +111,47 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
 
     setReady(true);
 
+    const syncSelection = () => {
+      const active = canvas.getActiveObject();
+      const objs = active?.type === 'activeselection'
+        ? (active as fabric.ActiveSelection).getObjects()
+        : active ? [active] : [];
+      setSelectionCount(objs.length);
+      setMultiTextSelected(
+        objs.length > 1 && objs.every((o) => o.type === 'textbox' || o.type === 'i-text'),
+      );
+    };
+    const configureSelectedTextboxes = (sel?: fabric.Object[]) => {
+      for (const o of sel ?? []) {
+        if (o.type === 'textbox') configureTextbox(o as fabric.Textbox);
+      }
+    };
+    // A multi-selection (ActiveSelection) scales its children when dragged,
+    // which stretches text. Disable group resizing: in a group you can move,
+    // align and match sizes (via the buttons), but not stretch by dragging.
+    const lockGroupScaling = () => {
+      const active = canvas.getActiveObject();
+      if (active?.type === 'activeselection') {
+        active.set({ lockScalingX: true, lockScalingY: true });
+        active.setControlsVisibility({
+          mt: false, mb: false, ml: false, mr: false,
+          tl: false, tr: false, bl: false, br: false,
+        });
+      }
+    };
     canvas.on('selection:created', (e) => {
+      configureSelectedTextboxes(e.selected);
+      lockGroupScaling();
+      syncSelection();
       if (e.selected?.[0]) setSelected(getProps(e.selected[0]));
     });
     canvas.on('selection:updated', (e) => {
+      configureSelectedTextboxes(e.selected);
+      lockGroupScaling();
+      syncSelection();
       if (e.selected?.[0]) setSelected(getProps(e.selected[0]));
     });
-    canvas.on('selection:cleared', () => setSelected(null));
+    canvas.on('selection:cleared', () => { setSelected(null); setSelectionCount(0); setMultiTextSelected(false); });
     canvas.on('object:modified', (e) => {
       if (e.target) setSelected(getProps(e.target));
     });
@@ -131,6 +179,7 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
       textAlign: 'center',
       ...options,
     });
+    configureTextbox(t);
     canvas.add(t);
     canvas.setActiveObject(t);
     canvas.renderAll();
@@ -193,6 +242,20 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     return img ? (img.opacity ?? 1) : 1;
   }, []);
 
+  // Distinct text colors already used in the design (for a quick-pick palette)
+  const getUsedTextColors = useCallback((): string[] => {
+    const canvas = fabricRef.current;
+    if (!canvas) return [];
+    const colors = new Set<string>();
+    for (const o of canvas.getObjects()) {
+      if ((o.type === 'textbox' || o.type === 'i-text')) {
+        const fill = (o as fabric.Textbox).fill;
+        if (typeof fill === 'string') colors.add(fill);
+      }
+    }
+    return [...colors];
+  }, []);
+
   const updateSelected = useCallback((props: Partial<SelectedObjectProps>) => {
     const canvas = fabricRef.current;
     const obj = canvas?.getActiveObject();
@@ -212,6 +275,7 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     if (props.fill !== undefined) obj.set('fill', props.fill);
     if (props.fontWeight !== undefined) (obj as fabric.Textbox).set('fontWeight', props.fontWeight as 'normal' | 'bold');
     if (props.fontStyle !== undefined) (obj as fabric.Textbox).set('fontStyle', props.fontStyle as 'normal' | 'italic');
+    if (props.textAlign !== undefined) (obj as fabric.Textbox).set('textAlign', props.textAlign);
     if (props.angle !== undefined) obj.set('angle', props.angle);
     if (props.opacity !== undefined) obj.set('opacity', props.opacity);
     canvas.renderAll();
@@ -226,6 +290,76 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     canvas.discardActiveObject();
     canvas.renderAll();
     setSelected(null);
+  }, []);
+
+  // Align the currently multi-selected objects relative to their combined
+  // bounding box. Works for any origin/rotation because each object is moved
+  // by the delta between its current bounding rect and the target edge.
+  type AlignMode = 'left' | 'center-h' | 'right' | 'top' | 'center-v' | 'bottom';
+  const alignObjects = useCallback((mode: AlignMode) => {
+    const canvas = fabricRef.current;
+    const active = canvas?.getActiveObject();
+    if (!canvas || active?.type !== 'activeselection') return;
+    const objs = [...(active as fabric.ActiveSelection).getObjects()];
+    if (objs.length < 2) return;
+
+    // Drop the selection so each object reports absolute canvas coordinates
+    canvas.discardActiveObject();
+    const rects = objs.map((o) => ({ o, r: o.getBoundingRect() }));
+    const minLeft = Math.min(...rects.map((x) => x.r.left));
+    const maxRight = Math.max(...rects.map((x) => x.r.left + x.r.width));
+    const minTop = Math.min(...rects.map((x) => x.r.top));
+    const maxBottom = Math.max(...rects.map((x) => x.r.top + x.r.height));
+    const cx = (minLeft + maxRight) / 2;
+    const cy = (minTop + maxBottom) / 2;
+
+    for (const { o, r } of rects) {
+      let dx = 0;
+      let dy = 0;
+      if (mode === 'left') dx = minLeft - r.left;
+      else if (mode === 'center-h') dx = cx - r.width / 2 - r.left;
+      else if (mode === 'right') dx = maxRight - r.width - r.left;
+      else if (mode === 'top') dy = minTop - r.top;
+      else if (mode === 'center-v') dy = cy - r.height / 2 - r.top;
+      else if (mode === 'bottom') dy = maxBottom - r.height - r.top;
+      o.set({ left: (o.left ?? 0) + dx, top: (o.top ?? 0) + dy });
+      o.setCoords();
+    }
+
+    // Re-select the same objects so the user keeps the multi-selection
+    const sel = new fabric.ActiveSelection(objs, { canvas });
+    canvas.setActiveObject(sel);
+    canvas.requestRenderAll();
+    canvas.fire('object:modified'); // record one history step
+  }, []);
+
+  // Apply text-style props to every text object in the current multi-selection
+  const updateSelectedTexts = useCallback((props: Partial<SelectedObjectProps>) => {
+    const canvas = fabricRef.current;
+    const active = canvas?.getActiveObject();
+    if (!canvas || active?.type !== 'activeselection') return;
+    const texts = (active as fabric.ActiveSelection)
+      .getObjects()
+      .filter((o) => o.type === 'textbox' || o.type === 'i-text') as fabric.Textbox[];
+    if (texts.length === 0) return;
+
+    for (const t of texts) {
+      if (props.fontSize !== undefined) t.set('fontSize', props.fontSize);
+      if (props.fontFamily !== undefined) {
+        t.set('fontFamily', props.fontFamily);
+        if (document.fonts?.load) {
+          document.fonts.load(`32px "${props.fontFamily}"`).then(() => canvas.renderAll()).catch(() => {});
+        }
+      }
+      if (props.fill !== undefined) t.set('fill', props.fill);
+      if (props.fontWeight !== undefined) t.set('fontWeight', props.fontWeight as 'normal' | 'bold');
+      if (props.fontStyle !== undefined) t.set('fontStyle', props.fontStyle as 'normal' | 'italic');
+      if (props.textAlign !== undefined) t.set('textAlign', props.textAlign);
+    }
+    canvas.renderAll();
+    // Reflect the change on the panel (values come from the first selected text)
+    setSelected((prev) => (prev ? { ...prev, ...props } : prev));
+    canvas.fire('object:modified');
   }, []);
 
   const bringForward = useCallback(() => {
@@ -262,6 +396,10 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     // Loading external design resets history
     isRestoringRef.current = true;
     return canvas.loadFromJSON(JSON.parse(json)).then(() => {
+      // Apply the non-deforming text behaviour to loaded textboxes too
+      for (const o of canvas.getObjects()) {
+        if (o.type === 'textbox') configureTextbox(o as fabric.Textbox);
+      }
       canvas.renderAll();
       // Web fonts in the saved design may not be ready yet — repaint once loaded
       if (document.fonts?.ready) {
@@ -318,6 +456,10 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
   return {
     ready,
     selected,
+    selectionCount,
+    multiTextSelected,
+    alignObjects,
+    updateSelectedTexts,
     zoom,
     canUndo,
     canRedo,
@@ -328,6 +470,7 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     setBackgroundColor,
     setBackgroundOpacity,
     getBackgroundOpacity,
+    getUsedTextColors,
     updateSelected,
     deleteSelected,
     bringForward,

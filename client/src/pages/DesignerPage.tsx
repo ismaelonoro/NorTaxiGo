@@ -4,6 +4,8 @@ import { ArrowLeft } from 'lucide-react';
 import { useDesigner, CANVAS_WIDTH, CANVAS_HEIGHT } from '@/components/designer/useDesigner';
 import Toolbar from '@/components/designer/Toolbar';
 import PropertiesPanel from '@/components/designer/PropertiesPanel';
+import AlignmentPanel from '@/components/designer/AlignmentPanel';
+import MultiTextPanel from '@/components/designer/MultiTextPanel';
 import {
   getTemplate, createTemplate, updateTemplate,
   getInstance, createInstance, updateInstance,
@@ -269,15 +271,36 @@ export default function DesignerPage() {
         </div>
       </div>
 
-      {/* Right properties panel */}
-      {designer.selected && (
-        <aside className="w-48 shrink-0 bg-white border-l border-gray-100 overflow-y-auto">
+      {/* Right properties panel — always present (fixed width) so selecting an
+          element doesn't reflow the canvas and shift things by accident */}
+      <aside className="w-48 shrink-0 bg-white border-l border-gray-100 overflow-y-auto">
+        {designer.selectionCount > 1 ? (
+          <>
+            {designer.multiTextSelected && designer.selected && (
+              <MultiTextPanel
+                count={designer.selectionCount}
+                values={designer.selected}
+                onChange={designer.updateSelectedTexts}
+                usedColors={designer.getUsedTextColors()}
+              />
+            )}
+            <AlignmentPanel
+              count={designer.selectionCount}
+              onAlign={designer.alignObjects}
+            />
+          </>
+        ) : designer.selected ? (
           <PropertiesPanel
             selected={designer.selected}
             onChange={designer.updateSelected}
+            usedColors={designer.getUsedTextColors()}
           />
-        </aside>
-      )}
+        ) : (
+          <div className="p-4 text-center text-xs text-gray-400">
+            Selecciona un elemento del lienzo para ver y editar sus propiedades.
+          </div>
+        )}
+      </aside>
 
       <Modal open={showSaveModal} onClose={() => setShowSaveModal(false)} title="Guardar diseño" size="sm">
         <div className="p-5 space-y-4">

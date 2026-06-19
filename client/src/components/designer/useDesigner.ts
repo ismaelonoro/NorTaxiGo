@@ -454,26 +454,28 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     // Allow replacing image placeholders AND any plain image (but not QRs)
     const canReplace = !!holder && (holder.isImageHolder || (holder.type === 'image' && !holder.isQR));
     if (!canvas || !holder || !canReplace) return;
-    const frameW = holder.holderW ?? holder.getScaledWidth();
-    const frameH = holder.holderH ?? holder.getScaledHeight();
-    const frameLeft = holder.left ?? 0;
-    const frameTop = holder.top ?? 0;
+    // Use the holder's bounding rect (absolute canvas coords) so this works
+    // regardless of its origin — groups are positioned by their center.
+    holder.setCoords();
+    const r = holder.getBoundingRect();
+    const frameLeft = r.left;
+    const frameTop = r.top;
+    const frameW = r.width;
+    const frameH = r.height;
 
     fabric.Image.fromURL(dataURL).then((img) => {
       const iw = img.width ?? 1;
       const ih = img.height ?? 1;
-      if (mode === 'fit') {
-        const scale = Math.min(frameW / iw, frameH / ih);
-        img.set({
-          scaleX: scale, scaleY: scale,
-          left: frameLeft + (frameW - iw * scale) / 2,
-          top: frameTop + (frameH - ih * scale) / 2,
-        });
-      } else {
-        img.set({ scaleX: 1, scaleY: 1, left: frameLeft, top: frameTop });
-      }
-      // Keep it a replaceable holder; remember the frame for future fits
-      Object.assign(img, { isImageHolder: true, holderW: frameW, holderH: frameH });
+      // fit: scale to fit inside the frame (keep aspect); real: natural size.
+      // Either way, center it within the frame so it lands where the holder was.
+      const scale = mode === 'fit' ? Math.min(frameW / iw, frameH / ih) : 1;
+      img.set({
+        originX: 'left', originY: 'top', angle: 0,
+        scaleX: scale, scaleY: scale,
+        left: frameLeft + (frameW - iw * scale) / 2,
+        top: frameTop + (frameH - ih * scale) / 2,
+      });
+      Object.assign(img, { isImageHolder: true });
       canvas.remove(holder);
       canvas.add(img);
       canvas.setActiveObject(img);

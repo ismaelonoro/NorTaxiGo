@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as fabric from 'fabric';
 import { generateQRDataURL } from '@/lib/qr';
+import { WEB_FONTS } from '@/lib/fonts';
 
 export const CANVAS_WIDTH = 794;
 export const CANVAS_HEIGHT = 1123;
@@ -109,6 +110,16 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     canvas.on('object:removed', saveSnapshot);
     canvas.on('object:modified', saveSnapshot);
 
+    // Preload the designer web fonts so canvas text renders in the right font
+    // from the start. Otherwise a font used only on the canvas loads lazily and
+    // the text repaints from a fallback to the real font on the next render —
+    // which looks like the font/size changing when you edit something else.
+    if (document.fonts?.load) {
+      Promise.all(WEB_FONTS.map((f) => document.fonts.load(`20px "${f}"`)))
+        .then(() => fabricRef.current?.renderAll())
+        .catch(() => {});
+    }
+
     setReady(true);
 
     const syncSelection = () => {
@@ -154,6 +165,181 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     canvas.on('selection:cleared', () => { setSelected(null); setSelectionCount(0); setMultiTextSelected(false); });
     canvas.on('object:modified', (e) => {
       if (e.target) setSelected(getProps(e.target));
+    });
+
+    // --- Smart guides / snapping ---------------------------------------
+    // While moving or resizing a single object, snap its edges/centers to the
+    // edges/centers of other objects (and the page), and draw guide lines.
+    const SNAP = 7; // threshold in canvas px
+    type SnapRect = { left: number; top: number; width: number; height: number };
+    type Target = { pos: number; rect: SnapRect | null }; // rect=null for page guides
+    let guides: { axis: 'x' | 'y'; pos: number; rect: SnapRect | null }[] = [];
+    let dragTarget: fabric.Object | null = null; // object being moved/resized
+
+    const selfEdges = (o: fabric.Object, axis: 'x' | 'y') => {
+      const r = o.getBoundingRect();
+      return axis === 'x'
+        ? [r.left, r.left + r.width / 2, r.left + r.width]
+        : [r.top, r.top + r.height / 2, r.top + r.height];
+    };
+
+    // Snap targets from every other object (carrying its rect so we can
+    // highlight it) plus the page edges/center (rect=null).
+    const targetsExcept = (skip: fabric.Object) => {
+      const xs: Target[] = [
+        { pos: 0, rect: null }, { pos: CANVAS_WIDTH / 2, rect: null }, { pos: CANVAS_WIDTH, rect: null },
+      ];
+      const ys: Target[] = [
+        { pos: 0, rect: null }, { pos: CANVAS_HEIGHT / 2, rect: null }, { pos: CANVAS_HEIGHT, rect: null },
+      ];
+      for (const o of canvas.getObjects()) {
+        if (o === skip) continue;
+        const r = o.getBoundingRect();
+        const rect: SnapRect = { left: r.left, top: r.top, width: r.width, height: r.height };
+        xs.push({ pos: r.left, rect }, { pos: r.left + r.width / 2, rect }, { pos: r.left + r.width, rect });
+        ys.push({ pos: r.top, rect }, { pos: r.top + r.height / 2, rect }, { pos: r.top + r.height, rect });
+      }
+      return { xs, ys };
+    };
+
+    const nearest = (val: number, targets: Target[]) => {
+      let best: { d: number; t: Target } | null = null;
+      for (const t of targets) {
+        const d = Math.abs(val - t.pos);
+        if (d <= SNAP && (!best || d < best.d)) best = { d, t };
+      }
+      return best;
+    };
+
+    canvas.on('object:moving', (e) => {
+      const obj = e.target;
+      if (!obj) return;
+      dragTarget = obj;
+      obj.setCoords();
+      const { xs, ys } = targetsExcept(obj);
+      const oxs = selfEdges(obj, 'x');
+      const oys = selfEdges(obj, 'y');
+      guides = [];
+
+      let snapX: { d: number; t: Target; ox: number } | null = null;
+      for (const ox of oxs) {
+        const n = nearest(ox, xs);
+        if (n && (!snapX || n.d < snapX.d)) snapX = { ...n, ox };
+      }
+      if (snapX) {
+        obj.set('left', (obj.left ?? 0) + (snapX.t.pos - snapX.ox));
+        guides.push({ axis: 'x', pos: snapX.t.pos, rect: snapX.t.rect });
+      }
+
+      let snapY: { d: number; t: Target; oy: number } | null = null;
+      for (const oy of oys) {
+        const n = nearest(oy, ys);
+        if (n && (!snapY || n.d < snapY.d)) snapY = { ...n, oy };
+      }
+      if (snapY) {
+        obj.set('top', (obj.top ?? 0) + (snapY.t.pos - snapY.oy));
+        guides.push({ axis: 'y', pos: snapY.t.pos, rect: snapY.t.rect });
+      }
+      obj.setCoords();
+    });
+
+    // Fires on corner scaling (images/QR) AND on textbox side-handle resizing
+    const onResize = (e: { target?: fabric.Object; transform?: { corner?: string } }) => {
+      const obj = e.target;
+      if (!obj || (obj.angle ?? 0) !== 0) return; // skip rotated objects
+      dragTarget = obj;
+      obj.setCoords();
+      const corner = (e.transform?.corner ?? (obj as unknown as { __corner?: string }).__corner ?? '') as string;
+      if (!corner) return;
+      const r = obj.getBoundingRect();
+      const { xs, ys } = targetsExcept(obj);
+      const isText = obj.type === 'textbox';
+      guides = [];
+
+      // Horizontal edges (left/right)
+      if (corner.includes('r')) {
+        const n = nearest(r.left + r.width, xs);
+        if (n) {
+          const targetW = n.t.pos - r.left;
+          if (targetW > 5) {
+            if (isText) obj.set('width', targetW / (obj.scaleX || 1));
+            else obj.set('scaleX', targetW / (obj.width || 1));
+            guides.push({ axis: 'x', pos: n.t.pos, rect: n.t.rect });
+          }
+        }
+      } else if (corner.includes('l')) {
+        const n = nearest(r.left, xs);
+        if (n) {
+          const targetW = r.left + r.width - n.t.pos;
+          if (targetW > 5) {
+            if (isText) obj.set('width', targetW / (obj.scaleX || 1));
+            else obj.set('scaleX', targetW / (obj.width || 1));
+            obj.set('left', n.t.pos);
+            guides.push({ axis: 'x', pos: n.t.pos, rect: n.t.rect });
+          }
+        }
+      }
+
+      // Vertical edges (top/bottom) — not for text (height is content-driven)
+      if (!isText) {
+        if (corner.includes('b')) {
+          const n = nearest(r.top + r.height, ys);
+          if (n) {
+            const targetH = n.t.pos - r.top;
+            if (targetH > 5) { obj.set('scaleY', targetH / (obj.height || 1)); guides.push({ axis: 'y', pos: n.t.pos, rect: n.t.rect }); }
+          }
+        } else if (corner.includes('t')) {
+          const n = nearest(r.top, ys);
+          if (n) {
+            const targetH = r.top + r.height - n.t.pos;
+            if (targetH > 5) { obj.set('scaleY', targetH / (obj.height || 1)); obj.set('top', n.t.pos); guides.push({ axis: 'y', pos: n.t.pos, rect: n.t.rect }); }
+          }
+        }
+      }
+      obj.setCoords();
+    };
+    canvas.on('object:scaling', onResize);
+    canvas.on('object:resizing', onResize);
+
+    canvas.on('after:render', () => {
+      if (!dragTarget) return;
+      const ctx = canvas.getContext();
+      ctx.save();
+
+      // Faint outline on every OTHER element, so you see all alignment options
+      ctx.strokeStyle = 'rgba(148,163,184,0.7)'; // soft gray
+      ctx.lineWidth = 1;
+      for (const o of canvas.getObjects()) {
+        if (o === dragTarget) continue;
+        const r = o.getBoundingRect();
+        ctx.strokeRect(r.left, r.top, r.width, r.height);
+      }
+
+      // Strong gold highlight on the element(s) we're actually aligning to
+      ctx.strokeStyle = '#C4973A';
+      ctx.lineWidth = 2;
+      const drawn = new Set<string>();
+      for (const g of guides) {
+        if (!g.rect) continue;
+        const key = `${g.rect.left},${g.rect.top},${g.rect.width},${g.rect.height}`;
+        if (drawn.has(key)) continue;
+        drawn.add(key);
+        ctx.strokeRect(g.rect.left, g.rect.top, g.rect.width, g.rect.height);
+      }
+
+      // Gold guide lines spanning the page at the snap positions
+      ctx.lineWidth = 1;
+      for (const g of guides) {
+        ctx.beginPath();
+        if (g.axis === 'x') { ctx.moveTo(g.pos, 0); ctx.lineTo(g.pos, CANVAS_HEIGHT); }
+        else { ctx.moveTo(0, g.pos); ctx.lineTo(CANVAS_WIDTH, g.pos); }
+        ctx.stroke();
+      }
+      ctx.restore();
+    });
+
+    canvas.on('mouse:up', () => {
+      if (dragTarget || guides.length) { dragTarget = null; guides = []; canvas.requestRenderAll(); }
     });
 
     return () => {

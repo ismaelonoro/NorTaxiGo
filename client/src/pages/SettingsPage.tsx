@@ -6,7 +6,7 @@ import {
   getBackgrounds, createBackground, deleteBackground,
   getAssets, createAsset, deleteAsset,
 } from '@/lib/api';
-import { makeThumbnail, fileToDataURL } from '@/lib/image';
+import { makeThumbnail, fileToDataURL, CHECKERBOARD_STYLE } from '@/lib/image';
 import type { Category, Folder, Background, Asset } from '@/types';
 import Spinner from '@/components/ui/Spinner';
 import toast from 'react-hot-toast';
@@ -71,7 +71,7 @@ export default function SettingsPage() {
     try {
       for (const file of files) {
         const dataURL = await fileToDataURL(file);
-        const thumbnail = await makeThumbnail(dataURL);
+        const thumbnail = await makeThumbnail(dataURL, 320, 'png');
         const name = file.name.replace(/\.[^.]+$/, '') || 'Imagen';
         const created = await createAsset({ name, image: dataURL, thumbnail });
         setAssets((prev) => [created, ...prev]);
@@ -357,8 +357,8 @@ export default function SettingsPage() {
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
             {assets.map((a) => (
-              <div key={a.id} className="group relative aspect-[3/4] rounded-lg overflow-hidden border border-gray-200">
-                <img src={a.thumbnail} alt={a.name} className="w-full h-full object-cover" />
+              <div key={a.id} style={CHECKERBOARD_STYLE} className="group relative aspect-[3/4] rounded-lg overflow-hidden border border-gray-200">
+                <img src={a.thumbnail} alt={a.name} className="w-full h-full object-contain" />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-start justify-end p-1.5">
                   <button
                     onClick={() => deleteAssetItem(a.id, a.name)}

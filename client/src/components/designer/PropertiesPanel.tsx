@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { QrCode, ImageIcon, List, Scissors } from 'lucide-react';
 import type { SelectedObjectProps } from './useDesigner';
 import TextStyleControls from './TextStyleControls';
-import { fileToDataURL } from '@/lib/image';
+import { fileToDataURL, makeThumbnail, CHECKERBOARD_STYLE } from '@/lib/image';
 import { removeImageBackground } from '@/lib/removeBg';
+import { createAsset } from '@/lib/api';
 import Modal from '@/components/ui/Modal';
 import Spinner from '@/components/ui/Spinner';
 import toast from 'react-hot-toast';
@@ -15,10 +16,11 @@ interface Props {
   onRegenerateQR?: (url: string) => void;
   onReplaceImage?: (dataURL: string, mode: 'fit' | 'real') => void;
   onSetImageSrc?: (dataURL: string) => void;
+  onAssetSaved?: () => void;
 }
 
 export default function PropertiesPanel({
-  selected, onChange, usedColors = [], onRegenerateQR, onReplaceImage, onSetImageSrc,
+  selected, onChange, usedColors = [], onRegenerateQR, onReplaceImage, onSetImageSrc, onAssetSaved,
 }: Props) {
   const isText = selected.type === 'textbox' || selected.type === 'i-text';
   const isImage = selected.type === 'image' && !selected.isQR;
@@ -30,6 +32,8 @@ export default function PropertiesPanel({
   const [bgOriginal, setBgOriginal] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
   const [bgDevice, setBgDevice] = useState<'gpu' | 'cpu' | null>(null);
+  const [savingLib, setSavingLib] = useState(false);
+  const [savedLib, setSavedLib] = useState(false);
   const imgInputRef = useRef<HTMLInputElement>(null);
 
   const handleRemoveBg = async () => {
@@ -41,11 +45,28 @@ export default function PropertiesPanel({
       setBgOriginal(original);
       setBgDevice(device);
       setShowOriginal(false);
+      setSavedLib(false);
       setBgPreview(dataURL); // open the preview modal
     } catch {
       toast.error('No se pudo quitar el fondo');
     } finally {
       setRemovingBg(false);
+    }
+  };
+
+  const handleSaveCutoutToLibrary = async () => {
+    if (!bgPreview) return;
+    setSavingLib(true);
+    try {
+      const thumbnail = await makeThumbnail(bgPreview, 320, 'png');
+      await createAsset({ name: 'Imagen sin fondo', image: bgPreview, thumbnail });
+      setSavedLib(true);
+      onAssetSaved?.();
+      toast.success('Guardada en la galería de imágenes');
+    } catch {
+      toast.error('No se pudo guardar en la galería');
+    } finally {
+      setSavingLib(false);
     }
   };
 
@@ -209,14 +230,7 @@ export default function PropertiesPanel({
 
           <div
             className="rounded-lg border border-gray-200 flex items-center justify-center p-3"
-            style={{
-              minHeight: 240,
-              backgroundImage:
-                'linear-gradient(45deg,#d1d5db 25%,transparent 25%),linear-gradient(-45deg,#d1d5db 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#d1d5db 75%),linear-gradient(-45deg,transparent 75%,#d1d5db 75%)',
-              backgroundSize: '16px 16px',
-              backgroundPosition: '0 0,0 8px,8px -8px,-8px 0',
-              backgroundColor: '#ffffff',
-            }}
+            style={{ minHeight: 240, ...CHECKERBOARD_STYLE }}
           >
             <img
               src={(showOriginal ? bgOriginal : bgPreview) ?? ''}
@@ -229,7 +243,16 @@ export default function PropertiesPanel({
             {bgDevice && <> · Procesado en <span className="font-medium">{bgDevice === 'gpu' ? 'GPU' : 'CPU'}</span></>}
           </p>
 
-          <div className="flex gap-2 justify-end">
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={handleSaveCutoutToLibrary}
+              disabled={savingLib || savedLib}
+              className="btn-secondary text-xs py-2 disabled:opacity-50"
+            >
+              {savingLib ? <Spinner size={12} /> : <ImageIcon size={12} />}
+              {savedLib ? 'Guardada ✓' : 'Guardar en galería'}
+            </button>
+            <div className="flex-1" />
             <button onClick={() => setBgPreview(null)} className="btn-ghost text-xs py-2">Cancelar</button>
             <button
               onClick={() => { if (bgPreview) onSetImageSrc?.(bgPreview); setBgPreview(null); }}

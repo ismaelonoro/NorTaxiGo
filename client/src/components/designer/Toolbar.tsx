@@ -9,7 +9,7 @@ import {
   generateBackground, getBackgrounds, getBackground, createBackground,
   getAssets, getAsset, createAsset,
 } from '@/lib/api';
-import { makeThumbnail, fileToDataURL } from '@/lib/image';
+import { makeThumbnail, fileToDataURL, CHECKERBOARD_STYLE } from '@/lib/image';
 import type { Background, Asset } from '@/types';
 import Spinner from '@/components/ui/Spinner';
 import toast from 'react-hot-toast';
@@ -21,12 +21,13 @@ interface Props {
   onSave: () => Promise<void>;
   onExport?: () => void;
   saving: boolean;
+  assetsVersion?: number; // bump to refresh the image gallery
 }
 
 
 const ZOOM_LEVELS = [0.4, 0.5, 0.65, 0.75, 0.9, 1];
 
-export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
+export default function Toolbar({ designer, onSave, onExport, saving, assetsVersion = 0 }: Props) {
   const [qrUrl, setQrUrl] = useState('');
   const [showQrInput, setShowQrInput] = useState(false);
   const [showBgPanel, setShowBgPanel] = useState(false);
@@ -117,16 +118,15 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
     }
   };
 
-  // Load the image library the first time the Images panel is opened
+  // Load/refresh the image library when the panel opens or an asset is added
   useEffect(() => {
-    if (showImgPanel && imgGallery.length === 0) {
-      setLoadingImgGallery(true);
-      getAssets()
-        .then(setImgGallery)
-        .catch(() => toast.error('No se pudo cargar la galería de imágenes'))
-        .finally(() => setLoadingImgGallery(false));
-    }
-  }, [showImgPanel]);
+    if (!showImgPanel) return;
+    setLoadingImgGallery(true);
+    getAssets()
+      .then(setImgGallery)
+      .catch(() => toast.error('No se pudo cargar la galería de imágenes'))
+      .finally(() => setLoadingImgGallery(false));
+  }, [showImgPanel, assetsVersion]);
 
   const insertAssetImage = async (asset: Asset) => {
     setInsertingAsset(asset.id);
@@ -148,7 +148,7 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
       const dataURL = await fileToDataURL(file);
       designer.addImageFromURL(dataURL, { left: 240, top: 300 });
       if (saveImgToGallery) {
-        const thumbnail = await makeThumbnail(dataURL);
+        const thumbnail = await makeThumbnail(dataURL, 320, 'png');
         const name = file.name.replace(/\.[^.]+$/, '') || 'Imagen';
         const created = await createAsset({ name, image: dataURL, thumbnail });
         setImgGallery((prev) => [created, ...prev]);
@@ -282,9 +282,10 @@ export default function Toolbar({ designer, onSave, onExport, saving }: Props) {
                     onClick={() => insertAssetImage(a)}
                     disabled={insertingAsset !== null}
                     title={a.name}
+                    style={CHECKERBOARD_STYLE}
                     className="relative aspect-[3/4] rounded-md overflow-hidden border border-gray-200 hover:border-gold-400 transition-colors disabled:opacity-50"
                   >
-                    <img src={a.thumbnail} alt={a.name} className="w-full h-full object-cover" />
+                    <img src={a.thumbnail} alt={a.name} className="w-full h-full object-contain" />
                     {insertingAsset === a.id && (
                       <div className="absolute inset-0 flex items-center justify-center bg-white/60">
                         <Spinner size={12} />

@@ -38,6 +38,7 @@ export default function DesignerPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [entityId, setEntityId] = useState<string | null>(id ?? null);
+  const [assetsVersion, setAssetsVersion] = useState(0);
 
   // Pending design to load once canvas is ready
   const pendingDesign = useRef<string | null>(null);
@@ -242,6 +243,7 @@ export default function DesignerPage() {
           onSave={handleSave}
           onExport={mode === 'instance' ? handleExport : undefined}
           saving={saving}
+          assetsVersion={assetsVersion}
         />
       </aside>
 
@@ -297,6 +299,7 @@ export default function DesignerPage() {
             onRegenerateQR={designer.regenerateQR}
             onReplaceImage={designer.replaceHolderImage}
             onSetImageSrc={designer.setSelectedImageSrc}
+            onAssetSaved={() => setAssetsVersion((v) => v + 1)}
           />
         ) : (
           <div className="p-4 text-center text-xs text-gray-400">

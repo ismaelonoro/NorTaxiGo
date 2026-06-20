@@ -4,7 +4,8 @@ import type { SelectedObjectProps } from './useDesigner';
 import TextStyleControls from './TextStyleControls';
 import { fileToDataURL, makeThumbnail, CHECKERBOARD_STYLE } from '@/lib/image';
 import { removeImageBackground } from '@/lib/removeBg';
-import { createAsset } from '@/lib/api';
+import { createAsset, getAssets, getAsset } from '@/lib/api';
+import type { Asset } from '@/types';
 import Modal from '@/components/ui/Modal';
 import Spinner from '@/components/ui/Spinner';
 import toast from 'react-hot-toast';
@@ -34,7 +35,38 @@ export default function PropertiesPanel({
   const [bgDevice, setBgDevice] = useState<'gpu' | 'cpu' | null>(null);
   const [savingLib, setSavingLib] = useState(false);
   const [savedLib, setSavedLib] = useState(false);
+  // Replace-image picker (gallery + upload)
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerAssets, setPickerAssets] = useState<Asset[]>([]);
+  const [loadingPicker, setLoadingPicker] = useState(false);
+  const [choosingAsset, setChoosingAsset] = useState<string | null>(null);
+  const [saveUploadToLib, setSaveUploadToLib] = useState(true);
   const imgInputRef = useRef<HTMLInputElement>(null);
+
+  // Load the gallery when the replace picker opens
+  useEffect(() => {
+    if (!showPicker) return;
+    setLoadingPicker(true);
+    getAssets()
+      .then(setPickerAssets)
+      .catch(() => toast.error('No se pudo cargar la galería'))
+      .finally(() => setLoadingPicker(false));
+  }, [showPicker]);
+
+  const chooseAssetForReplace = async (asset: Asset) => {
+    setChoosingAsset(asset.id);
+    try {
+      const full = await getAsset(asset.id);
+      if (full.image) {
+        setShowPicker(false);
+        setPendingImg(full.image); // open the fit/real modal
+      }
+    } catch {
+      toast.error('No se pudo cargar la imagen');
+    } finally {
+      setChoosingAsset(null);
+    }
+  };
 
   const handleRemoveBg = async () => {
     if (!selected.imageSrc) return;
@@ -78,7 +110,19 @@ export default function PropertiesPanel({
     if (!file) return;
     e.target.value = '';
     const dataURL = await fileToDataURL(file);
+    setShowPicker(false);
     setPendingImg(dataURL); // open the fit/real modal
+    if (saveUploadToLib) {
+      try {
+        const thumbnail = await makeThumbnail(dataURL, 320, 'png');
+        const name = file.name.replace(/\.[^.]+$/, '') || 'Imagen';
+        await createAsset({ name, image: dataURL, thumbnail });
+        onAssetSaved?.();
+        toast.success('Imagen añadida a la galería');
+      } catch {
+        /* saving to the library is best-effort; the replace still proceeds */
+      }
+    }
   };
 
   // Toggle a bullet list on the text's non-empty lines
@@ -165,7 +209,7 @@ export default function PropertiesPanel({
         <div>
           <label className="label text-[10px] flex items-center gap-1"><ImageIcon size={11} /> Imagen</label>
           <button
-            onClick={() => imgInputRef.current?.click()}
+            onClick={() => setShowPicker(true)}
             className="btn-secondary w-full justify-center text-xs py-1.5"
           >
             Reemplazar imagen
@@ -260,6 +304,54 @@ export default function PropertiesPanel({
             >
               Aplicar
             </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Replace-image picker: choose from the gallery or upload a new one */}
+      <Modal open={showPicker} onClose={() => setShowPicker(false)} title="Reemplazar imagen" size="md">
+        <div className="p-5 space-y-3">
+          <p className="label text-[10px]">Elegir de la galería</p>
+          {loadingPicker ? (
+            <div className="flex justify-center py-6 text-gray-400"><Spinner /></div>
+          ) : pickerAssets.length === 0 ? (
+            <p className="text-xs text-gray-400 py-1">Aún no hay imágenes guardadas.</p>
+          ) : (
+            <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-60 overflow-y-auto">
+              {pickerAssets.map((a) => (
+                <button
+                  key={a.id}
+                  onClick={() => chooseAssetForReplace(a)}
+                  disabled={choosingAsset !== null}
+                  title={a.name}
+                  style={CHECKERBOARD_STYLE}
+                  className="relative aspect-[3/4] rounded-md overflow-hidden border border-gray-200 hover:border-gold-400 transition-colors disabled:opacity-50"
+                >
+                  <img src={a.thumbnail} alt={a.name} className="w-full h-full object-contain" />
+                  {choosingAsset === a.id && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/60"><Spinner size={12} /></div>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-5 pt-4 border-t border-gray-100">
+            <p className="label text-[10px] mb-2">O subir una imagen nueva</p>
+            <div className="rounded-lg bg-cream-50 border border-cream-200 p-3 space-y-2.5">
+              <button onClick={() => imgInputRef.current?.click()} className="btn-secondary w-full justify-center text-xs py-2">
+                <ImageIcon size={12} /> Subir imagen nueva
+              </button>
+              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={saveUploadToLib}
+                  onChange={(e) => setSaveUploadToLib(e.target.checked)}
+                  className="w-4 h-4 accent-gold-500"
+                />
+                Guardar también en la galería
+              </label>
+            </div>
           </div>
         </div>
       </Modal>

@@ -28,6 +28,7 @@ export type SelectedObjectProps = {
   isQR?: boolean;
   qrUrl?: string;
   isImageHolder?: boolean;
+  imageSrc?: string;
 };
 
 const MAX_HISTORY = 50;
@@ -70,6 +71,7 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
       isQR: o.isQR,
       qrUrl: o.qrUrl,
       isImageHolder: o.isImageHolder,
+      imageSrc: obj.type === 'image' ? (obj as fabric.Image).getSrc() : undefined,
     };
     if (obj.type === 'textbox' || obj.type === 'i-text') {
       const t = obj as fabric.Textbox;
@@ -404,6 +406,19 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     const dataURL = await generateQRDataURL(url, 400);
     await obj.setSrc(dataURL);
     obj.qrUrl = url;
+    obj.setCoords();
+    canvas.renderAll();
+    setSelected(getProps(obj));
+    canvas.fire('object:modified');
+  }, [getProps]);
+
+  // Replace the selected image's source (e.g. background-removed version),
+  // keeping its position, scale and angle
+  const setSelectedImageSrc = useCallback(async (dataURL: string) => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getActiveObject() as fabric.Image | undefined;
+    if (!canvas || !obj || obj.type !== 'image') return;
+    await obj.setSrc(dataURL);
     obj.setCoords();
     canvas.renderAll();
     setSelected(getProps(obj));
@@ -746,6 +761,7 @@ export function useDesigner(canvasRef: React.RefObject<HTMLCanvasElement | null>
     addText,
     addQR,
     regenerateQR,
+    setSelectedImageSrc,
     addImageFromURL,
     addImagePlaceholder,
     replaceHolderImage,

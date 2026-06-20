@@ -296,6 +296,7 @@ export default function DesignerPage() {
             usedColors={designer.getUsedTextColors()}
             onRegenerateQR={designer.regenerateQR}
             onReplaceImage={designer.replaceHolderImage}
+            onSetImageSrc={designer.setSelectedImageSrc}
           />
         ) : (
           <div className="p-4 text-center text-xs text-gray-400">

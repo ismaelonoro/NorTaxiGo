@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { QrCode, ImageIcon, List } from 'lucide-react';
+import { QrCode, ImageIcon, List, Scissors } from 'lucide-react';
 import type { SelectedObjectProps } from './useDesigner';
 import TextStyleControls from './TextStyleControls';
 import { fileToDataURL } from '@/lib/image';
+import { removeImageBackground } from '@/lib/removeBg';
 import Modal from '@/components/ui/Modal';
+import Spinner from '@/components/ui/Spinner';
+import toast from 'react-hot-toast';
 
 interface Props {
   selected: SelectedObjectProps;
@@ -11,16 +14,40 @@ interface Props {
   usedColors?: string[];
   onRegenerateQR?: (url: string) => void;
   onReplaceImage?: (dataURL: string, mode: 'fit' | 'real') => void;
+  onSetImageSrc?: (dataURL: string) => void;
 }
 
 export default function PropertiesPanel({
-  selected, onChange, usedColors = [], onRegenerateQR, onReplaceImage,
+  selected, onChange, usedColors = [], onRegenerateQR, onReplaceImage, onSetImageSrc,
 }: Props) {
   const isText = selected.type === 'textbox' || selected.type === 'i-text';
+  const isImage = selected.type === 'image' && !selected.isQR;
 
   const [qrUrl, setQrUrl] = useState('');
   const [pendingImg, setPendingImg] = useState<string | null>(null);
+  const [removingBg, setRemovingBg] = useState(false);
+  const [bgPreview, setBgPreview] = useState<string | null>(null);
+  const [bgOriginal, setBgOriginal] = useState<string | null>(null);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [bgDevice, setBgDevice] = useState<'gpu' | 'cpu' | null>(null);
   const imgInputRef = useRef<HTMLInputElement>(null);
+
+  const handleRemoveBg = async () => {
+    if (!selected.imageSrc) return;
+    setRemovingBg(true);
+    try {
+      const original = selected.imageSrc;
+      const { dataURL, device } = await removeImageBackground(original);
+      setBgOriginal(original);
+      setBgDevice(device);
+      setShowOriginal(false);
+      setBgPreview(dataURL); // open the preview modal
+    } catch {
+      toast.error('No se pudo quitar el fondo');
+    } finally {
+      setRemovingBg(false);
+    }
+  };
 
   // Keep the QR URL field in sync with the selected QR
   useEffect(() => { setQrUrl(selected.qrUrl ?? ''); }, [selected.qrUrl]);
@@ -113,7 +140,7 @@ export default function PropertiesPanel({
       )}
 
       {/* Image replacement — holders and any plain image (not QRs) */}
-      {(selected.isImageHolder || (selected.type === 'image' && !selected.isQR)) && onReplaceImage && (
+      {(selected.isImageHolder || isImage) && onReplaceImage && (
         <div>
           <label className="label text-[10px] flex items-center gap-1"><ImageIcon size={11} /> Imagen</label>
           <button
@@ -123,6 +150,16 @@ export default function PropertiesPanel({
             Reemplazar imagen
           </button>
           <input ref={imgInputRef} type="file" accept="image/*" className="hidden" onChange={handlePickImage} />
+
+          {isImage && onSetImageSrc && selected.imageSrc && (
+            <button
+              onClick={handleRemoveBg}
+              disabled={removingBg}
+              className="btn-ghost w-full justify-center text-xs py-1.5 mt-1.5 disabled:opacity-50"
+            >
+              {removingBg ? <><Spinner size={12} /> Quitando fondo...</> : <><Scissors size={12} /> Quitar fondo</>}
+            </button>
+          )}
         </div>
       )}
 
@@ -150,6 +187,59 @@ export default function PropertiesPanel({
           <TextStyleControls values={selected} onChange={onChange} usedColors={usedColors} />
         </>
       )}
+
+      {/* Background-removal preview over a checkerboard; apply or cancel */}
+      <Modal open={bgPreview !== null} onClose={() => setBgPreview(null)} title="Vista previa sin fondo" size="md">
+        <div className="p-5 space-y-3">
+          {/* Before / after toggle */}
+          <div className="flex gap-1 p-0.5 bg-gray-100 rounded-lg w-max mx-auto">
+            <button
+              onClick={() => setShowOriginal(true)}
+              className={`px-3 py-1 text-xs rounded-md transition-colors ${showOriginal ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
+            >
+              Antes
+            </button>
+            <button
+              onClick={() => setShowOriginal(false)}
+              className={`px-3 py-1 text-xs rounded-md transition-colors ${!showOriginal ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
+            >
+              Después
+            </button>
+          </div>
+
+          <div
+            className="rounded-lg border border-gray-200 flex items-center justify-center p-3"
+            style={{
+              minHeight: 240,
+              backgroundImage:
+                'linear-gradient(45deg,#d1d5db 25%,transparent 25%),linear-gradient(-45deg,#d1d5db 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#d1d5db 75%),linear-gradient(-45deg,transparent 75%,#d1d5db 75%)',
+              backgroundSize: '16px 16px',
+              backgroundPosition: '0 0,0 8px,8px -8px,-8px 0',
+              backgroundColor: '#ffffff',
+            }}
+          >
+            <img
+              src={(showOriginal ? bgOriginal : bgPreview) ?? ''}
+              alt={showOriginal ? 'Original' : 'Sin fondo'}
+              className="max-h-72 max-w-full object-contain"
+            />
+          </div>
+          <p className="text-xs text-gray-400 text-center">
+            Las zonas a cuadros son transparentes.
+            {bgDevice && <> · Procesado en <span className="font-medium">{bgDevice === 'gpu' ? 'GPU' : 'CPU'}</span></>}
+          </p>
+
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setBgPreview(null)} className="btn-ghost text-xs py-2">Cancelar</button>
+            <button
+              onClick={() => { if (bgPreview) onSetImageSrc?.(bgPreview); setBgPreview(null); }}
+              className="btn-primary text-xs py-2"
+            >
+              Aplicar
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Fit / real-size modal after picking a replacement image */}
       <Modal open={pendingImg !== null} onClose={() => setPendingImg(null)} title="¿Cómo colocar la imagen?" size="sm">
